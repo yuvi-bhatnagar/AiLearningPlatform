@@ -14,13 +14,17 @@ public class UnitTest1 : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
-    public async Task GetWeatherForecast_ShouldReturnSuccessStatusCode()
+    public async Task Ping_ShouldReturnOkWithPong()
     {
+        // Arrange
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/weatherforecast");
+        // Act
+        var response = await client.GetAsync("/ping");
 
+        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync();
+        content.Should().Be("Pong");
     }
 }
-
