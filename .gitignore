@@ -31,3 +31,7 @@ dist-ssr/
 # OS-specific
 Thumbs.db
 .DS_Store
+
+# Gemini
+[Gg]emini.md
+[Gg]emini.md.user
