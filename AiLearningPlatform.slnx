@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AiLearningPlatform.API/AiLearningPlatform.API.csproj" />
+    <Project Path="src/AiLearningPlatform.Application/AiLearningPlatform.Application.csproj" />
+    <Project Path="src/AiLearningPlatform.Domain/AiLearningPlatform.Domain.csproj" />
+    <Project Path="src/AiLearningPlatform.Infrastructure/AiLearningPlatform.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AiLearningPlatform.API.IntegrationTests/AiLearningPlatform.API.IntegrationTests.csproj" />
+    <Project Path="tests/AiLearningPlatform.Application.Tests/AiLearningPlatform.Application.Tests.csproj" />
+  </Folder>
+</Solution>
