@@ -3,9 +3,15 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using FluentValidation;
 using AiLearningPlatform.Application.Common.Interfaces;
+using AiLearningPlatform.Application.Features.Courses;
+using AiLearningPlatform.Application.Features.Quizzes;
+using AiLearningPlatform.Application.Features.Questions;
 using AiLearningPlatform.Infrastructure.Data;
+using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
+using AiLearningPlatform.API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,12 +63,24 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // ============================================================
-// 4. DEPENDENCY INJECTION — Security Services
+// 4. DEPENDENCY INJECTION — Application & Infrastructure Services
 // ============================================================
-// Why AddScoped? Both services are stateless but depend on IConfiguration (singleton).
-// Scoped means: one instance per HTTP request, shared within that request.
+// Security Services
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+// Repositories
+builder.Services.AddScoped<ICourseRepository, CourseRepository>();
+builder.Services.AddScoped<IQuizRepository, QuizRepository>();
+builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
+
+// Services
+builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddScoped<IQuizService, QuizService>();
+builder.Services.AddScoped<IQuestionService, QuestionService>();
+
+// Validators
+builder.Services.AddValidatorsFromAssembly(typeof(CourseService).Assembly);
 
 // ============================================================
 // 5. CONTROLLERS & SWAGGER (Swashbuckle with JWT Bearer)
@@ -120,9 +138,11 @@ var app = builder.Build();
 // 6. MIDDLEWARE PIPELINE
 // ============================================================
 // Why order matters: middleware runs top-to-bottom in the pipeline.
+// UseMiddleware<ExceptionHandlingMiddleware> MUST run first to catch downstream exceptions.
 // UseAuthentication MUST come BEFORE UseAuthorization.
 // → UseAuthentication reads the token and populates HttpContext.User
 // → UseAuthorization then checks HttpContext.User for [Authorize] attributes
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 if (app.Environment.IsDevelopment())
 {
     // UseSwagger serves the OpenAPI JSON spec at /swagger/v1/swagger.json
