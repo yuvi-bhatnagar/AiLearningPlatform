@@ -1,13 +1,17 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using AiLearningPlatform.Application.Features.Auth.DTOs;
 using AiLearningPlatform.Application.Features.Courses.DTOs;
 using AiLearningPlatform.Application.Features.Quizzes.DTOs;
 using AiLearningPlatform.Application.Features.Questions.DTOs;
 using AiLearningPlatform.Application.Features.Attempts.DTOs;
 using AiLearningPlatform.Domain.Enums;
+using AiLearningPlatform.Domain.Entities;
+using AiLearningPlatform.Infrastructure.Data;
 
 namespace AiLearningPlatform.API.IntegrationTests;
 
@@ -111,5 +115,54 @@ public class AttemptIntegrationTests : IClassFixture<AuthTestWebAppFactory>
         var startRequest = new StartAttemptRequest(Guid.NewGuid());
         var startResponse = await _client.PostAsJsonAsync("/api/v1/attempts/start", startRequest);
         startResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Student_QuizAttemptFlow_Subjective_ShouldEnqueueJobAndPendingGrading()
+    {
+        // Arrange
+        var username = "std_subjective_" + Guid.NewGuid().ToString("N")[..6];
+        var email = username + "@example.com";
+        var studentToken = (await AuthenticateClientAsync(username, UserRole.Student)).AccessToken;
+
+        // Seed subjective question
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var teacher = new User { Id = Guid.NewGuid(), Username = "TeacherSub_" + Guid.NewGuid().ToString("N")[..6], Email = "teachersub_" + Guid.NewGuid().ToString("N")[..6] + "@edu.com", PasswordHash = "hash", Role = UserRole.Teacher };
+        var course = new Course { Id = Guid.NewGuid(), Title = "Course", Instructor = teacher };
+        var quiz = new Quiz { Id = Guid.NewGuid(), Title = "Quiz", Course = course };
+        var question = new Question { Id = Guid.NewGuid(), QuizId = quiz.Id, Type = QuestionType.Subjective, Text = "Explain selective queries", CorrectAnswer = "SELECT keyword", Points = 10 };
+
+        context.Users.Add(teacher);
+        context.Courses.Add(course);
+        context.Quizzes.Add(quiz);
+        context.Questions.Add(question);
+        await context.SaveChangesAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", studentToken);
+
+        // Start Attempt
+        var startRequest = new StartAttemptRequest(quiz.Id);
+        var startResponse = await _client.PostAsJsonAsync("/api/v1/attempts/start", startRequest);
+        startResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var attempt = await startResponse.Content.ReadFromJsonAsync<AttemptDto>();
+
+        // Submit Attempt
+        var submitRequest = new SubmitAttemptRequest(new List<SubmitAnswerDto>
+        {
+            new SubmitAnswerDto(question.Id, "Selective query uses SELECT statement.")
+        });
+
+        // Act
+        var submitResponse = await _client.PostAsJsonAsync($"/api/v1/attempts/{attempt!.Id}/submit", submitRequest);
+
+        // Assert
+        submitResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await submitResponse.Content.ReadFromJsonAsync<AttemptResultDto>();
+        result.Should().NotBeNull();
+        result!.Status.Should().Be(AttemptStatus.PendingGrading.ToString());
+        result.Score.Should().BeNull();
+        result.Submissions[0].IsCorrect.Should().BeNull();
     }
 }

@@ -83,6 +83,9 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>
                 .ReturnsAsync(new AiEvaluationResultDto(9.0, true, "AI feedback: Excellent!", "High"));
 
             services.AddSingleton<IAiService>(aiServiceMock.Object);
+
+            var backgroundJobServiceMock = new Mock<IBackgroundJobService>();
+            services.AddSingleton<IBackgroundJobService>(backgroundJobServiceMock.Object);
         });
     }
 }

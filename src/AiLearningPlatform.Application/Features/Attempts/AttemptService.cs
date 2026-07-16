@@ -13,7 +13,7 @@ public class AttemptService : IAttemptService
     private readonly IAttemptRepository _attemptRepository;
     private readonly IQuizRepository _quizRepository;
     private readonly ICourseRepository _courseRepository;
-    private readonly IAiService _aiService;
+    private readonly IBackgroundJobService _backgroundJobService;
     private readonly IValidator<StartAttemptRequest> _startValidator;
     private readonly IValidator<SubmitAttemptRequest> _submitValidator;
 
@@ -21,14 +21,14 @@ public class AttemptService : IAttemptService
         IAttemptRepository attemptRepository,
         IQuizRepository quizRepository,
         ICourseRepository courseRepository,
-        IAiService aiService,
+        IBackgroundJobService backgroundJobService,
         IValidator<StartAttemptRequest> startValidator,
         IValidator<SubmitAttemptRequest> submitValidator)
     {
         _attemptRepository = attemptRepository;
         _quizRepository = quizRepository;
         _courseRepository = courseRepository;
-        _aiService = aiService;
+        _backgroundJobService = backgroundJobService;
         _startValidator = startValidator;
         _submitValidator = submitValidator;
     }
@@ -112,6 +112,7 @@ public class AttemptService : IAttemptService
         attempt.AnswerSubmissions.Clear();
 
         double totalScore = 0;
+        bool hasSubjective = false;
 
         foreach (var question in questions)
         {
@@ -134,34 +135,33 @@ public class AttemptService : IAttemptService
             }
             else if (question.Type == QuestionType.Subjective)
             {
-                try
-                {
-                    var evalResult = await _aiService.EvaluateAnswerAsync(question.Text, question.CorrectAnswer ?? string.Empty, studentAnswer);
-                    
-                    // The AI returns a score out of 10. Scale it to the question's Points.
-                    var scaledScore = (evalResult.Score / 10.0) * question.Points;
-
-                    submission.IsCorrect = evalResult.IsCorrect;
-                    submission.Score = Math.Round(scaledScore, 2);
-                    submission.Feedback = evalResult.Feedback;
-                    totalScore += submission.Score.Value;
-                }
-                catch (Exception ex)
-                {
-                    // Propagate the exception so that it flows back to the controller/middleware
-                    throw new Exception($"AI Answer Evaluation failed for question {question.Id}: {ex.Message}", ex);
-                }
+                submission.IsCorrect = null;
+                submission.Score = null;
+                submission.Feedback = null;
+                hasSubjective = true;
             }
 
             attempt.AnswerSubmissions.Add(submission);
         }
 
         attempt.SubmittedAtUtc = DateTime.UtcNow;
-        // In Module 6, evaluation is synchronous, so all attempts end up fully Graded
-        attempt.Status = AttemptStatus.Graded;
-        attempt.Score = totalScore;
+        if (hasSubjective)
+        {
+            attempt.Status = AttemptStatus.PendingGrading;
+            attempt.Score = null;
+        }
+        else
+        {
+            attempt.Status = AttemptStatus.Graded;
+            attempt.Score = totalScore;
+        }
 
         await _attemptRepository.SaveChangesAsync();
+
+        if (hasSubjective)
+        {
+            _backgroundJobService.EnqueueGradingJob(attempt.Id);
+        }
 
         return MapToResultDto(attempt);
     }
