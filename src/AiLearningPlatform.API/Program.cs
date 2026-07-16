@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Infrastructure.Data;
 using AiLearningPlatform.Infrastructure.Security;
@@ -64,10 +65,54 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
 // ============================================================
-// 5. CONTROLLERS & SWAGGER
+// 5. CONTROLLERS & SWAGGER (Swashbuckle with JWT Bearer)
 // ============================================================
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+
+// Why Swashbuckle instead of AddOpenApi()?
+// We use Swashbuckle.AspNetCore (already installed) because it has stable, built-in
+// support for JWT Bearer auth in Swagger UI via AddSecurityDefinition/AddSecurityRequirement.
+// Microsoft.AspNetCore.OpenApi 10.x uses a different internal version of Microsoft.OpenApi
+// that has breaking namespace changes — Swashbuckle is the battle-tested choice.
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "AI Learning Platform API",
+        Version = "v1",
+        Description = "REST API for the AI Learning Platform"
+    });
+
+    // Step 1: Define the Bearer security scheme
+    // This tells Swagger UI: "this API accepts JWT Bearer tokens"
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        // Using Type = Http with Scheme = "bearer" enables automatic prefixing of "Bearer " by Swagger UI.
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Paste your JWT access token here. Get one from POST /api/v1/auth/login or /register."
+    });
+
+    // Step 2: Apply the security requirement to ALL endpoints globally
+    // This makes the 🔒 padlock appear on every route
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 var app = builder.Build();
 
@@ -80,10 +125,14 @@ var app = builder.Build();
 // → UseAuthorization then checks HttpContext.User for [Authorize] attributes
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    // UseSwagger serves the OpenAPI JSON spec at /swagger/v1/swagger.json
+    // UseSwaggerUI serves the browser UI at /swagger
+    app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("/openapi/v1.json", "v1");
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "AI Learning Platform v1");
+        // Collapse all operations by default for a cleaner first view
+        options.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
     });
 }
 

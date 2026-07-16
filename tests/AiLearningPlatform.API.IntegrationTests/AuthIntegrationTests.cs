@@ -2,23 +2,74 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using AiLearningPlatform.Application.Features.Auth.DTOs;
 using AiLearningPlatform.Domain.Enums;
+using AiLearningPlatform.Infrastructure.Data;
 
 namespace AiLearningPlatform.API.IntegrationTests;
 
-// Why WebApplicationFactory?
-// WebApplicationFactory<Program> spins up a full in-memory instance of our ASP.NET Core app
-// (including middleware, controllers, DI container) without needing a real HTTP server or port.
-// This lets us test the FULL request pipeline — routing, auth middleware, model validation —
-// all in a single test process.
-public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+// Why a custom WebApplicationFactory?
+// The default factory uses the real appsettings (real SQL Server) which means:
+//   ❌ Tests require Docker to be running
+//   ❌ Admin seed fails on second test run (duplicate key)
+//   ❌ Tests leave dirty data in the real database
+//   ❌ Tests are slow and non-deterministic
+//
+// By overriding the DbContext to use InMemory:
+//   ✅ Tests run without Docker
+//   ✅ Each factory gets a fresh database
+//   ✅ Tests are fast (~milliseconds), isolated, and reproducible
+//   ✅ CI/CD pipeline works without infrastructure dependencies
+//
+// Note: InMemory doesn't validate SQL constraints (unique keys, FKs) the same way.
+// For constraint-level tests, use Testcontainers (Module 8) with a real SQL Server.
+public class AuthTestWebAppFactory : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =>
+        {
+            // Remove the real SQL Server DbContextOptions registration
+            var descriptor = services.SingleOrDefault(
+                d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+            if (descriptor != null)
+                services.Remove(descriptor);
+
+            // Create a clean, isolated service provider for EF Core in-memory database services.
+            // This prevents the 'multiple database providers registered' collision between SqlServer and InMemory.
+            var internalServiceProvider = new ServiceCollection()
+                .AddEntityFrameworkInMemoryDatabase()
+                .BuildServiceProvider();
+
+            // Re-register AppDbContext using the isolated in-memory provider.
+            // Crucial: Generate the database name ONCE outside the configuration action.
+            // If Guid.NewGuid() is called inside options.UseInMemoryDatabase(...), EF Core will
+            // generate a different database for every HTTP request, meaning registered users
+            // will disappear when we try to login in a subsequent request.
+            var dbName = "TestAuthDb_" + Guid.NewGuid().ToString("N");
+
+            services.AddDbContext<AppDbContext>(options =>
+            {
+                options.UseInMemoryDatabase(dbName);
+                options.UseInternalServiceProvider(internalServiceProvider);
+            });
+        });
+    }
+}
+
+// Why IClassFixture<AuthTestWebAppFactory>?
+// xUnit creates ONE factory instance shared across all tests in this class.
+// This means all tests in this file share the SAME in-memory database.
+// If test isolation within the class is needed, generate unique emails/usernames (we already do).
+public class AuthIntegrationTests : IClassFixture<AuthTestWebAppFactory>
 {
     private readonly HttpClient _client;
 
-    public AuthIntegrationTests(WebApplicationFactory<Program> factory)
+    public AuthIntegrationTests(AuthTestWebAppFactory factory)
     {
-        // Create test HTTP client with the in-memory test server
         _client = factory.CreateClient();
     }
 
