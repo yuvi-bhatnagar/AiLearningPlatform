@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using AiLearningPlatform.Application.Features.Quizzes;
 using AiLearningPlatform.Application.Features.Quizzes.DTOs;
 using System.Security.Claims;
@@ -67,5 +68,15 @@ public class QuizzesController : ControllerBase
     {
         await _quizService.DeleteAsync(id, CurrentUserId, CurrentUserRole);
         return NoContent();
+    }
+
+    // POST /api/v1/quizzes/{quizId}/generate-questions
+    [Authorize(Roles = "Teacher,Admin")]
+    [EnableRateLimiting("AiEndpointPolicy")]
+    [HttpPost("{quizId}/generate-questions")]
+    public async Task<IActionResult> GenerateQuestions(Guid quizId, [FromBody] GenerateQuestionsRequest request)
+    {
+        var questions = await _quizService.GenerateQuestionsAsync(quizId, request.Topic, request.QuestionCount, CurrentUserId, CurrentUserRole);
+        return Ok(questions);
     }
 }

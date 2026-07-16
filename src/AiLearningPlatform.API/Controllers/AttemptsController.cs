@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using AiLearningPlatform.Application.Features.Attempts;
@@ -36,6 +37,7 @@ public class AttemptsController : ControllerBase
     }
 
     // POST /api/v1/attempts/{id}/submit
+    [EnableRateLimiting("AiEndpointPolicy")]
     [HttpPost("{id}/submit")]
     public async Task<IActionResult> Submit(Guid id, [FromBody] SubmitAttemptRequest request)
     {

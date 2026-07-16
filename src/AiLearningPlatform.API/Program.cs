@@ -1,5 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -12,6 +14,7 @@ using AiLearningPlatform.Application.Features.Attempts;
 using AiLearningPlatform.Infrastructure.Data;
 using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
+using AiLearningPlatform.Infrastructure.Services;
 using AiLearningPlatform.API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -119,8 +122,34 @@ builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAttemptService, AttemptService>();
 
+// AI Services with Resilience
+builder.Services.AddHttpClient<IAiService, GeminiAiService>(client =>
+{
+    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+})
+.AddStandardResilienceHandler();
+
 // Validators
 builder.Services.AddValidatorsFromAssembly(typeof(CourseService).Assembly);
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AiEndpointPolicy", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                     ?? context.Connection.RemoteIpAddress?.ToString() 
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = 5,
+            QueueLimit = 0
+        });
+    });
+});
 
 // ============================================================
 // 5. CONTROLLERS & SWAGGER (Swashbuckle with JWT Bearer)
@@ -201,6 +230,7 @@ app.UseHttpsRedirection();
 // ORDER IS CRITICAL: Authentication → Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

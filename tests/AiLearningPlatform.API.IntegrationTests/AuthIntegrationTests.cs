@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using AiLearningPlatform.Application.Common.Interfaces;
+using AiLearningPlatform.Application.Features.AI.DTOs;
 using AiLearningPlatform.Application.Features.Auth.DTOs;
 using AiLearningPlatform.Domain.Enums;
 using AiLearningPlatform.Infrastructure.Data;
@@ -56,6 +59,30 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase(dbName);
                 options.UseInternalServiceProvider(internalServiceProvider);
             });
+
+            // Mock IAiService for all integration tests to prevent calling the actual Gemini API
+            var aiServiceMock = new Mock<IAiService>();
+            
+            aiServiceMock.Setup(ai => ai.GenerateQuizAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync((string topic, int count) =>
+                {
+                    var questions = new List<GeneratedQuestionDto>();
+                    for (int i = 1; i <= count; i++)
+                    {
+                        questions.Add(new GeneratedQuestionDto(
+                            $"AI Question {i} about {topic}",
+                            new List<string> { "Option A", "Option B", "Option C", "Option D" },
+                            "Option A",
+                            10
+                        ));
+                    }
+                    return questions;
+                });
+                
+            aiServiceMock.Setup(ai => ai.EvaluateAnswerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(new AiEvaluationResultDto(9.0, true, "AI feedback: Excellent!", "High"));
+
+            services.AddSingleton<IAiService>(aiServiceMock.Object);
         });
     }
 }

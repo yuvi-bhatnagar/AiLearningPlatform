@@ -1,7 +1,10 @@
+using System.Text.Json;
 using FluentValidation;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.Quizzes.DTOs;
+using AiLearningPlatform.Application.Features.Questions.DTOs;
 using AiLearningPlatform.Domain.Entities;
+using AiLearningPlatform.Domain.Enums;
 using AiLearningPlatform.Domain.Exceptions;
 
 namespace AiLearningPlatform.Application.Features.Quizzes;
@@ -10,17 +13,23 @@ public class QuizService : IQuizService
 {
     private readonly IQuizRepository _quizRepository;
     private readonly ICourseRepository _courseRepository;
+    private readonly IQuestionRepository _questionRepository;
+    private readonly IAiService _aiService;
     private readonly IValidator<CreateQuizRequest> _createValidator;
     private readonly IValidator<UpdateQuizRequest> _updateValidator;
 
     public QuizService(
         IQuizRepository quizRepository,
         ICourseRepository courseRepository,
+        IQuestionRepository questionRepository,
+        IAiService aiService,
         IValidator<CreateQuizRequest> createValidator,
         IValidator<UpdateQuizRequest> updateValidator)
     {
         _quizRepository = quizRepository;
         _courseRepository = courseRepository;
+        _questionRepository = questionRepository;
+        _aiService = aiService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
     }
@@ -119,6 +128,63 @@ public class QuizService : IQuizService
 
         _quizRepository.Delete(quiz);
         await _quizRepository.SaveChangesAsync();
+    }
+
+    public async Task<IEnumerable<QuestionDto>> GenerateQuestionsAsync(Guid quizId, string topic, int questionCount, Guid currentUserId, string currentUserRole)
+    {
+        if (questionCount <= 0)
+        {
+            var errors = new Dictionary<string, string[]> { { "QuestionCount", new[] { "Question count must be greater than 0." } } };
+            throw new Domain.Exceptions.ValidationException(errors);
+        }
+        if (string.IsNullOrWhiteSpace(topic))
+        {
+            var errors = new Dictionary<string, string[]> { { "Topic", new[] { "Topic cannot be empty." } } };
+            throw new Domain.Exceptions.ValidationException(errors);
+        }
+
+        var quiz = await _quizRepository.GetByIdAsync(quizId);
+        if (quiz is null)
+            throw new NotFoundException(nameof(Quiz), quizId);
+
+        var course = await _courseRepository.GetByIdAsync(quiz.CourseId);
+        if (course is null)
+            throw new NotFoundException(nameof(Course), quiz.CourseId);
+
+        // Authorization: Only the course's instructor or Admin can generate questions
+        if (currentUserRole != "Admin" && course.InstructorId != currentUserId)
+            throw new UnauthorizedAccessException("You are not authorized to generate questions for this quiz.");
+
+        var generated = await _aiService.GenerateQuizAsync(topic, questionCount);
+        var createdQuestions = new List<QuestionDto>();
+
+        foreach (var gen in generated)
+        {
+            var question = new Question
+            {
+                Id = Guid.NewGuid(),
+                QuizId = quizId,
+                Text = gen.Text,
+                Type = QuestionType.MultipleChoice,
+                OptionsJson = JsonSerializer.Serialize(gen.Options),
+                CorrectAnswer = gen.CorrectAnswer,
+                Points = gen.Points
+            };
+
+            await _questionRepository.AddAsync(question);
+            createdQuestions.Add(new QuestionDto(
+                question.Id,
+                question.QuizId,
+                question.Text,
+                question.Type,
+                gen.Options,
+                question.CorrectAnswer,
+                question.Points
+            ));
+        }
+
+        await _questionRepository.SaveChangesAsync();
+        return createdQuestions;
     }
 
     private static QuizDto MapToDto(Quiz quiz) =>

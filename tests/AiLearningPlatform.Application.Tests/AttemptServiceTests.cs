@@ -5,6 +5,7 @@ using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.Attempts;
 using AiLearningPlatform.Application.Features.Attempts.DTOs;
 using AiLearningPlatform.Application.Features.Attempts.Validators;
+using AiLearningPlatform.Application.Features.AI.DTOs;
 using AiLearningPlatform.Domain.Entities;
 using AiLearningPlatform.Domain.Enums;
 using AiLearningPlatform.Domain.Exceptions;
@@ -16,6 +17,7 @@ public class AttemptServiceTests
     private readonly Mock<IAttemptRepository> _attemptRepoMock = new();
     private readonly Mock<IQuizRepository> _quizRepoMock = new();
     private readonly Mock<ICourseRepository> _courseRepoMock = new();
+    private readonly Mock<IAiService> _aiServiceMock = new();
     private readonly AttemptService _attemptService;
 
     public AttemptServiceTests()
@@ -27,6 +29,7 @@ public class AttemptServiceTests
             _attemptRepoMock.Object,
             _quizRepoMock.Object,
             _courseRepoMock.Object,
+            _aiServiceMock.Object,
             startValidator,
             submitValidator
         );
@@ -208,10 +211,14 @@ public class AttemptServiceTests
         _attemptRepoMock.Setup(repo => repo.SaveChangesAsync())
             .Returns(Task.CompletedTask);
 
+        var aiEval = new AiEvaluationResultDto(8.0, true, "Good job!", "High");
+        _aiServiceMock.Setup(ai => ai.EvaluateAnswerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(aiEval);
+
         var request = new SubmitAttemptRequest(new List<SubmitAnswerDto>
         {
-            new SubmitAnswerDto(q1Id, "A"),
-            new SubmitAnswerDto(q2Id, "Some subjective essay answer")
+            new SubmitAnswerDto(q1Id, "A"), // Correct MCQ = 5 pts
+            new SubmitAnswerDto(q2Id, "Some subjective essay answer") // Subjective AI evaluated = 8/10 * 10 = 8 pts
         });
 
         // Act
@@ -219,13 +226,14 @@ public class AttemptServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Status.Should().Be(AttemptStatus.PendingGrading.ToString());
-        result.Score.Should().BeNull(); // Subjective stays null
+        result.Status.Should().Be(AttemptStatus.Graded.ToString());
+        result.Score.Should().Be(13.0); // 5 + 8
         result.Submissions.Should().HaveCount(2);
 
         var sub2 = result.Submissions.First(s => s.QuestionId == q2Id);
-        sub2.IsCorrect.Should().BeNull();
-        sub2.Score.Should().BeNull();
+        sub2.IsCorrect.Should().BeTrue();
+        sub2.Score.Should().Be(8.0);
+        sub2.Feedback.Should().Be("Good job!");
 
         _attemptRepoMock.Verify(repo => repo.SaveChangesAsync(), Times.Once);
     }
