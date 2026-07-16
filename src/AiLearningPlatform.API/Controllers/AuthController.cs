@@ -41,6 +41,13 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        // Why block Admin registration?
+        // Admin is a privileged role seeded once at startup from configuration.
+        // Allowing public registration as Admin would be a critical security vulnerability.
+        // In production, Admin accounts should only be created by the system or existing Admins.
+        if (request.Role == Domain.Enums.UserRole.Admin)
+            return Forbid();
+
         // Check for duplicate email — emails must be unique in the Users table
         var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
         if (existingUser is not null)

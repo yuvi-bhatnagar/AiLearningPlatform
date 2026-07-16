@@ -95,6 +95,48 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// ============================================================
+// 7. ADMIN SEED
+// ============================================================
+// Why seed at startup?
+// There must always be at least one Admin in the system.
+// Admin cannot register via the public endpoint (by design).
+// This seed runs every startup but is IDEMPOTENT — it checks if the admin
+// already exists before inserting, so it never creates duplicates.
+//
+// Why use a scope?
+// DbContext is registered as Scoped (per-request). Outside of an HTTP request
+// (like startup), we must manually create a scope to resolve Scoped services.
+// Using app.Services directly would fail for Scoped services.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    var adminConfig = app.Configuration.GetSection("AdminSeed");
+
+    var adminEmail = adminConfig["Email"];
+    var adminUsername = adminConfig["Username"];
+    var adminPassword = adminConfig["Password"];
+
+    // Only seed if config is present AND admin doesn't already exist
+    if (!string.IsNullOrEmpty(adminEmail) && !db.Users.Any(u => u.Email == adminEmail))
+    {
+        var admin = new AiLearningPlatform.Domain.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            Username = adminUsername!,
+            Email = adminEmail!,
+            PasswordHash = hasher.Hash(adminPassword!),
+            Role = AiLearningPlatform.Domain.Enums.UserRole.Admin,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        db.Users.Add(admin);
+        db.SaveChanges();
+
+        Console.WriteLine($"[Seed] Admin user created: {adminEmail}");
+    }
+}
+
 app.Run();
 
 public partial class Program { }
