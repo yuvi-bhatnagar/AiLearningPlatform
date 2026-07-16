@@ -53,6 +53,43 @@ builder.Services.AddAuthentication(options =>
         // By default, JWT allows a 5-minute clock skew. Setting to zero enforces exact expiry.
         ClockSkew = TimeSpan.Zero
     };
+
+    // Why configure events?
+    // By default, ASP.NET Core returns empty responses (0 content-length) for 401 Unauthorized
+    // and 403 Forbidden. Registering these event hooks intercepts those challenges and
+    // writes a consistent, friendly JSON error payload back to the client.
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = context =>
+        {
+            // Skip the default framework logic to prevent writing the default header challenge format
+            context.HandleResponse();
+
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+
+            var payload = new
+            {
+                status = 401,
+                message = "You must be signed in to perform this action."
+            };
+
+            return context.Response.WriteAsJsonAsync(payload);
+        },
+        OnForbidden = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+
+            var payload = new
+            {
+                status = 403,
+                message = "You do not have permission to perform this action."
+            };
+
+            return context.Response.WriteAsJsonAsync(payload);
+        }
+    };
 });
 
 // ============================================================

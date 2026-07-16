@@ -121,7 +121,7 @@ public class CourseCrudTests : IClassFixture<AuthTestWebAppFactory>
 
         // Check structured error message shape returned by ExceptionHandlingMiddleware
         var body = await response.Content.ReadAsStringAsync();
-        body.Should().Contain("One or more validation failures have occurred.");
+        body.Should().Contain("One or more inputs are invalid.");
         body.Should().Contain("Title is required.");
     }
 }
