@@ -114,7 +114,7 @@ public class AiIntegrationTests : IClassFixture<AuthTestWebAppFactory>
     public async Task AiEndpoints_RateLimiter_ShouldBlockRequestsBeyondThreshold()
     {
         // Arrange
-        var teacherEmail = $"teacher_limiter_{Guid.NewGuid()}@edu.com";
+        var teacherEmail = $"t_lim_{Guid.NewGuid().ToString("N")[..8]}@edu.com";
         var (token, teacherId) = await RegisterAndLoginAsync(teacherEmail, UserRole.Teacher);
 
         using var scope = _factory.Services.CreateScope();

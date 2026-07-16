@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Testcontainers.MsSql;
+using Xunit;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.AI.DTOs;
 using AiLearningPlatform.Application.Features.Auth.DTOs;
@@ -29,8 +31,29 @@ namespace AiLearningPlatform.API.IntegrationTests;
 //
 // Note: InMemory doesn't validate SQL constraints (unique keys, FKs) the same way.
 // For constraint-level tests, use Testcontainers (Module 8) with a real SQL Server.
-public class AuthTestWebAppFactory : WebApplicationFactory<Program>
+public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private readonly MsSqlContainer _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+        .Build();
+
+    public async Task InitializeAsync()
+    {
+        await _dbContainer.StartAsync();
+
+        // Apply migrations to setup schema in the container
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(_dbContainer.GetConnectionString())
+            .Options;
+
+        using var context = new AppDbContext(options);
+        await context.Database.MigrateAsync();
+    }
+
+    public new async Task DisposeAsync()
+    {
+        await _dbContainer.DisposeAsync().AsTask();
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureServices(services =>
@@ -41,23 +64,10 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>
             if (descriptor != null)
                 services.Remove(descriptor);
 
-            // Create a clean, isolated service provider for EF Core in-memory database services.
-            // This prevents the 'multiple database providers registered' collision between SqlServer and InMemory.
-            var internalServiceProvider = new ServiceCollection()
-                .AddEntityFrameworkInMemoryDatabase()
-                .BuildServiceProvider();
-
-            // Re-register AppDbContext using the isolated in-memory provider.
-            // Crucial: Generate the database name ONCE outside the configuration action.
-            // If Guid.NewGuid() is called inside options.UseInMemoryDatabase(...), EF Core will
-            // generate a different database for every HTTP request, meaning registered users
-            // will disappear when we try to login in a subsequent request.
-            var dbName = "TestAuthDb_" + Guid.NewGuid().ToString("N");
-
+            // Re-register AppDbContext using the Testcontainers connection string
             services.AddDbContext<AppDbContext>(options =>
             {
-                options.UseInMemoryDatabase(dbName);
-                options.UseInternalServiceProvider(internalServiceProvider);
+                options.UseSqlServer(_dbContainer.GetConnectionString());
             });
 
             // Mock IAiService for all integration tests to prevent calling the actual Gemini API
