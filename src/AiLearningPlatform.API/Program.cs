@@ -8,6 +8,7 @@ using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.Courses;
 using AiLearningPlatform.Application.Features.Quizzes;
 using AiLearningPlatform.Application.Features.Questions;
+using AiLearningPlatform.Application.Features.Attempts;
 using AiLearningPlatform.Infrastructure.Data;
 using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
@@ -110,11 +111,13 @@ builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<IQuizRepository, QuizRepository>();
 builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
+builder.Services.AddScoped<IAttemptRepository, AttemptRepository>();
 
 // Services
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
+builder.Services.AddScoped<IAttemptService, AttemptService>();
 
 // Validators
 builder.Services.AddValidatorsFromAssembly(typeof(CourseService).Assembly);
