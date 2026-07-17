@@ -1,122 +1,178 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BookOpen, LogOut, Shield, GraduationCap, LayoutDashboard } from 'lucide-react';
+import RoleProtectedRoute from './components/RoleProtectedRoute';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import StudentDashboard from './pages/StudentDashboard';
+import TeacherDashboard from './pages/TeacherDashboard';
+import AdminDashboard from './pages/AdminDashboard';
+import QuizAttempt from './pages/QuizAttempt';
+import QuizResult from './pages/QuizResult';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [user, setUser] = useState(null);
+
+  // Sync user state with local storage
+  const syncUser = () => {
+    const token = localStorage.getItem('accessToken');
+    const role = localStorage.getItem('userRole');
+    const username = localStorage.getItem('username');
+    if (token && role) {
+      setUser({ token, role, username });
+    } else {
+      setUser(null);
+    }
+  };
+
+  useEffect(() => {
+    syncUser();
+    // Watch local storage for authentication changes across components
+    window.addEventListener('storage', syncUser);
+    return () => window.removeEventListener('storage', syncUser);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('username');
+    setUser(null);
+    window.location.href = '/login';
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      {/* Premium Header */}
+      <header>
+        <div className="container header-content">
+          <Link to="/" className="logo-link" onClick={syncUser}>
+            <GraduationCap size={28} className="logo-icon" />
+            <span>AI Learning Platform</span>
+          </Link>
+          
+          <div className="nav-links">
+            {user ? (
+              <>
+                <span className="user-info">
+                  <span className="badge badge-student">
+                    {user.role}
+                  </span>
+                  <strong>{user.username}</strong>
+                </span>
+                
+                {user.role === 'Student' && (
+                  <Link to="/student" className="btn btn-secondary btn-sm">
+                    <LayoutDashboard size={16} />
+                    Dashboard
+                  </Link>
+                )}
+                {user.role === 'Teacher' && (
+                  <Link to="/teacher" className="btn btn-secondary btn-sm">
+                    <LayoutDashboard size={16} />
+                    Dashboard
+                  </Link>
+                )}
+                {user.role === 'Admin' && (
+                  <Link to="/admin" className="btn btn-secondary btn-sm">
+                    <Shield size={16} />
+                    Admin Panel
+                  </Link>
+                )}
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+                <button onClick={handleLogout} className="btn btn-danger btn-sm">
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="btn btn-secondary btn-sm">Sign In</Link>
+                <Link to="/register" className="btn btn-primary btn-sm">Sign Up</Link>
+              </>
+            )}
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* Main Content Area */}
+      <main className="container" style={{ flexGrow: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
+        <Routes>
+          {/* Guest routes */}
+          <Route path="/login" element={<Login onAuthSuccess={syncUser} />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Student Protected routes */}
+          <Route 
+            path="/student" 
+            element={
+              <RoleProtectedRoute allowedRoles={['Student']}>
+                <StudentDashboard />
+              </RoleProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/quiz/:quizId/attempt" 
+            element={
+              <RoleProtectedRoute allowedRoles={['Student']}>
+                <QuizAttempt />
+              </RoleProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/attempt/:attemptId/result" 
+            element={
+              <RoleProtectedRoute allowedRoles={['Student']}>
+                <QuizResult />
+              </RoleProtectedRoute>
+            } 
+          />
+
+          {/* Teacher Protected routes */}
+          <Route 
+            path="/teacher" 
+            element={
+              <RoleProtectedRoute allowedRoles={['Teacher']}>
+                <TeacherDashboard />
+              </RoleProtectedRoute>
+            } 
+          />
+
+          {/* Admin Protected routes */}
+          <Route 
+            path="/admin" 
+            element={
+              <RoleProtectedRoute allowedRoles={['Admin']}>
+                <AdminDashboard />
+              </RoleProtectedRoute>
+            } 
+          />
+
+          {/* Root redirect */}
+          <Route 
+            path="/" 
+            element={
+              user ? (
+                user.role === 'Student' ? <Navigate to="/student" replace /> :
+                user.role === 'Teacher' ? <Navigate to="/teacher" replace /> :
+                <Navigate to="/admin" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+
+      {/* Premium Footer */}
+      <footer>
+        <div className="container">
+          <p>© {new Date().getFullYear()} AI-Powered Learning Platform. All rights reserved.</p>
+        </div>
+      </footer>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;

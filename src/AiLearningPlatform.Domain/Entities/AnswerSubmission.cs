@@ -9,6 +9,7 @@ public class AnswerSubmission
     public bool? IsCorrect { get; set; }
     public double? Score { get; set; }
     public string? Feedback { get; set; }
+    public string? Confidence { get; set; }
 
     // Navigation properties
     public Attempt Attempt { get; set; } = null!;

@@ -32,6 +32,15 @@ builder.Host.UseSerilog((context, configuration) => configuration
 // ============================================================
 // 1. DATABASE
 // ============================================================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalClient", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 // Why: AppDbContext is the EF Core bridge between our C# entities and SQL Server.
 // Registered as Scoped — a new instance per HTTP request (important for EF Core).
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -262,6 +271,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // ORDER IS CRITICAL: Authentication → Authorization
+app.UseCors("AllowLocalClient");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

@@ -8,6 +8,7 @@ public interface IAttemptRepository
     Task<IEnumerable<Attempt>> GetByUserIdAsync(Guid userId);
     Task<Attempt?> GetActiveAttemptAsync(Guid quizId, Guid userId);
     Task<User?> GetUserByIdAsync(Guid id);
+    Task<IEnumerable<Attempt>> GetLowConfidenceAttemptsByInstructorAsync(Guid instructorId);
     Task AddAsync(Attempt attempt);
     void Update(Attempt attempt);
     Task SaveChangesAsync();

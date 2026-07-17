@@ -47,6 +47,18 @@ public class AttemptRepository : IAttemptRepository
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
+    public async Task<IEnumerable<Attempt>> GetLowConfidenceAttemptsByInstructorAsync(Guid instructorId)
+    {
+        return await _context.Attempts
+            .Include(a => a.User)
+            .Include(a => a.Quiz)
+            .Include(a => a.AnswerSubmissions)
+                .ThenInclude(ans => ans.Question)
+            .Where(a => a.Quiz.Course.InstructorId == instructorId &&
+                        a.AnswerSubmissions.Any(ans => ans.Confidence == "Low"))
+            .ToListAsync();
+    }
+
     public async Task AddAsync(Attempt attempt)
     {
         await _context.Attempts.AddAsync(attempt);

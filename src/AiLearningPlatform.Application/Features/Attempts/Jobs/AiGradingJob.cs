@@ -51,6 +51,7 @@ public class AiGradingJob : IAiGradingJob
                     submission.IsCorrect = evalResult.IsCorrect;
                     submission.Score = Math.Round(scaledScore, 2);
                     submission.Feedback = evalResult.Feedback;
+                    submission.Confidence = evalResult.Confidence;
                     totalScore += submission.Score.Value;
                 }
                 catch (Exception)

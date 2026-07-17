@@ -117,6 +117,7 @@ public class AppDbContext : DbContext
             entity.HasKey(asub => asub.Id);
             entity.Property(asub => asub.StudentAnswer).IsRequired(); // Could be long text, no max length
             entity.Property(asub => asub.Feedback).HasMaxLength(2000);
+            entity.Property(asub => asub.Confidence).HasMaxLength(20);
 
             // Attempt -> AnswerSubmissions (1-to-many)
             entity.HasOne(asub => asub.Attempt)
