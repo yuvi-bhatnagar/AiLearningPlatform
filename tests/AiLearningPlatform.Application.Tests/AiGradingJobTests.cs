@@ -6,17 +6,20 @@ using AiLearningPlatform.Application.Features.AI.DTOs;
 using AiLearningPlatform.Domain.Entities;
 using AiLearningPlatform.Domain.Enums;
 
+using Microsoft.Extensions.Caching.Distributed;
+
 namespace AiLearningPlatform.Application.Tests;
 
 public class AiGradingJobTests
 {
     private readonly Mock<IAttemptRepository> _attemptRepoMock = new();
     private readonly Mock<IAiService> _aiServiceMock = new();
+    private readonly Mock<IDistributedCache> _cacheMock = new();
     private readonly AiGradingJob _job;
 
     public AiGradingJobTests()
     {
-        _job = new AiGradingJob(_attemptRepoMock.Object, _aiServiceMock.Object);
+        _job = new AiGradingJob(_attemptRepoMock.Object, _aiServiceMock.Object, _cacheMock.Object);
     }
 
     [Fact]

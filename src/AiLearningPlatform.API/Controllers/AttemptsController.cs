@@ -52,4 +52,30 @@ public class AttemptsController : ControllerBase
         var result = await _attemptService.GetAttemptByIdAsync(id, CurrentUserId, CurrentUserRole);
         return Ok(result);
     }
+
+    // GET /api/v1/attempts
+    [HttpGet]
+    public async Task<IActionResult> GetMyAttempts()
+    {
+        var result = await _attemptService.GetAttemptsByUserIdAsync(CurrentUserId);
+        return Ok(result);
+    }
+
+    // POST /api/v1/attempts/{id}/override
+    [Authorize(Roles = "Teacher,Admin")]
+    [HttpPost("{id}/override")]
+    public async Task<IActionResult> OverrideGrade(Guid id, [FromBody] OverrideGradeRequest request)
+    {
+        var result = await _attemptService.OverrideSubmissionGradeAsync(id, request, CurrentUserId);
+        return Ok(result);
+    }
+
+    // GET /api/v1/attempts/low-confidence
+    [Authorize(Roles = "Teacher,Admin")]
+    [HttpGet("low-confidence")]
+    public async Task<IActionResult> GetLowConfidenceReviews()
+    {
+        var result = await _attemptService.GetLowConfidenceReviewsAsync(CurrentUserId);
+        return Ok(result);
+    }
 }

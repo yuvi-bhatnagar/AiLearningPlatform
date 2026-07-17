@@ -25,6 +25,7 @@ public class QuizRepository : IQuizRepository
     public async Task<IEnumerable<Quiz>> GetByCourseIdAsync(Guid courseId)
     {
         return await _context.Quizzes
+            .AsNoTracking()
             .Where(q => q.CourseId == courseId)
             .OrderByDescending(q => q.CreatedAtUtc)
             .ToListAsync();

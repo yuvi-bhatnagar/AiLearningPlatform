@@ -12,5 +12,11 @@ services:
     volumes:
       - mssql_data:/var/opt/mssql
 
+  redis:
+    image: redis:alpine
+    container_name: ailearning_redis
+    ports:
+      - "6379:6379"
+
 volumes:
   mssql_data:

@@ -25,6 +25,7 @@ public class CourseRepository : ICourseRepository
     public async Task<IEnumerable<Course>> GetAllAsync()
     {
         return await _context.Courses
+            .AsNoTracking()
             .Include(c => c.Instructor)
             .OrderByDescending(c => c.CreatedAtUtc)
             .ToListAsync();

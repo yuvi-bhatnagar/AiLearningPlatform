@@ -31,6 +31,10 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                     b.Property<Guid>("AttemptId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Confidence")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Feedback")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -92,6 +96,40 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                     b.ToTable("Attempts");
                 });
 
+            modelBuilder.Entity("AiLearningPlatform.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AuditLogs");
+                });
+
             modelBuilder.Entity("AiLearningPlatform.Domain.Entities.Course", b =>
                 {
                     b.Property<Guid>("Id")
@@ -119,6 +157,29 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                     b.HasIndex("InstructorId");
 
                     b.ToTable("Courses");
+                });
+
+            modelBuilder.Entity("AiLearningPlatform.Domain.Entities.LeaderboardRow", b =>
+                {
+                    b.Property<int>("QuizzesAttempted")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("int");
+
+                    b.Property<double>("TotalScore")
+                        .HasColumnType("float");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("LeaderboardView", (string)null);
                 });
 
             modelBuilder.Entity("AiLearningPlatform.Domain.Entities.Question", b =>
@@ -188,6 +249,33 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                     b.ToTable("Quizzes");
                 });
 
+            modelBuilder.Entity("AiLearningPlatform.Domain.Entities.StudentPerformanceSummary", b =>
+                {
+                    b.Property<double>("AverageScore")
+                        .HasColumnType("float");
+
+                    b.Property<double>("HighestScore")
+                        .HasColumnType("float");
+
+                    b.Property<double>("LowestScore")
+                        .HasColumnType("float");
+
+                    b.Property<int>("TotalAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<double>("TotalScore")
+                        .HasColumnType("float");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.ToTable((string)null);
+                });
+
             modelBuilder.Entity("AiLearningPlatform.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -201,6 +289,9 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("LastAttemptDateUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -217,6 +308,9 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Streak")
+                        .HasColumnType("int");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -268,6 +362,16 @@ namespace AiLearningPlatform.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Quiz");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AiLearningPlatform.Domain.Entities.AuditLog", b =>
+                {
+                    b.HasOne("AiLearningPlatform.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
                 });

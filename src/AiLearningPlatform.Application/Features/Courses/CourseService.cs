@@ -1,5 +1,7 @@
 using FluentValidation;
+using Microsoft.Extensions.Caching.Distributed;
 using AiLearningPlatform.Application.Common.Interfaces;
+using AiLearningPlatform.Application.Common.Extensions;
 using AiLearningPlatform.Application.Features.Courses.DTOs;
 using AiLearningPlatform.Domain.Entities;
 using AiLearningPlatform.Domain.Exceptions;
@@ -11,15 +13,19 @@ public class CourseService : ICourseService
     private readonly ICourseRepository _courseRepository;
     private readonly IValidator<CreateCourseRequest> _createValidator;
     private readonly IValidator<UpdateCourseRequest> _updateValidator;
+    private readonly IDistributedCache _cache;
+    private const string CourseListCacheKey = "CourseListData";
 
     public CourseService(
         ICourseRepository courseRepository,
         IValidator<CreateCourseRequest> createValidator,
-        IValidator<UpdateCourseRequest> updateValidator)
+        IValidator<UpdateCourseRequest> updateValidator,
+        IDistributedCache cache)
     {
         _courseRepository = courseRepository;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _cache = cache;
     }
 
     public async Task<CourseDto> GetByIdAsync(Guid id)
@@ -33,8 +39,18 @@ public class CourseService : ICourseService
 
     public async Task<IEnumerable<CourseDto>> GetAllAsync()
     {
+        var cachedCourses = await _cache.GetRecordAsync<List<CourseDto>>(CourseListCacheKey);
+        if (cachedCourses is not null)
+        {
+            return cachedCourses;
+        }
+
         var courses = await _courseRepository.GetAllAsync();
-        return courses.Select(MapToDto);
+        var courseDtos = courses.Select(MapToDto).ToList();
+
+        await _cache.SetRecordAsync(CourseListCacheKey, courseDtos, TimeSpan.FromHours(24));
+
+        return courseDtos;
     }
 
     public async Task<CourseDto> CreateAsync(CreateCourseRequest request, Guid instructorId)
@@ -54,6 +70,8 @@ public class CourseService : ICourseService
 
         await _courseRepository.AddAsync(course);
         await _courseRepository.SaveChangesAsync();
+
+        await _cache.RemoveAsync(CourseListCacheKey);
 
         return MapToDto(course);
     }
@@ -78,6 +96,8 @@ public class CourseService : ICourseService
         _courseRepository.Update(course);
         await _courseRepository.SaveChangesAsync();
 
+        await _cache.RemoveAsync(CourseListCacheKey);
+
         return MapToDto(course);
     }
 
@@ -93,6 +113,8 @@ public class CourseService : ICourseService
 
         _courseRepository.Delete(course);
         await _courseRepository.SaveChangesAsync();
+
+        await _cache.RemoveAsync(CourseListCacheKey);
     }
 
     private static CourseDto MapToDto(Course course) =>

@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using AiLearningPlatform.Application.Features.Auth.DTOs;
 using AiLearningPlatform.Application.Features.Courses.DTOs;
 using AiLearningPlatform.Domain.Enums;
+using AiLearningPlatform.Infrastructure.Data;
 
 namespace AiLearningPlatform.API.IntegrationTests;
 
@@ -123,5 +125,58 @@ public class CourseCrudTests : IClassFixture<AuthTestWebAppFactory>
         var body = await response.Content.ReadAsStringAsync();
         body.Should().Contain("One or more inputs are invalid.");
         body.Should().Contain("Title is required.");
+    }
+
+    [Fact]
+    public async Task CourseList_CachingAndInvalidation_ShouldWorkCorrectly()
+    {
+        // 1. Authenticate as Teacher
+        var auth = await AuthenticateClientAsync("teacher_caching", UserRole.Teacher);
+
+        // 2. Create Course (POST) to make sure there's at least one course
+        var createRequest = new CreateCourseRequest("Caching Test Course", "Desc");
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/courses", createRequest);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdCourse = await createResponse.Content.ReadFromJsonAsync<CourseDto>();
+
+        // 3. Clear cache and trigger initial load to populate cache
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var cache = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
+            await cache.RemoveAsync("CourseListData");
+        }
+
+        var listResponse1 = await _client.GetAsync("/api/v1/courses");
+        listResponse1.StatusCode.Should().Be(HttpStatusCode.OK);
+        var list1 = await listResponse1.Content.ReadFromJsonAsync<List<CourseDto>>();
+        list1.Should().Contain(x => x.Id == createdCourse!.Id);
+
+        // 4. Modify course in DB directly behind the scenes (bypassing the service layer)
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var course = await db.Courses.FindAsync(createdCourse!.Id);
+            course!.Title = "Directly Edited Title";
+            await db.SaveChangesAsync();
+        }
+
+        // 5. Fetch all courses again. It should return cached data (with old title "Caching Test Course"), NOT DB data!
+        var listResponse2 = await _client.GetAsync("/api/v1/courses");
+        listResponse2.StatusCode.Should().Be(HttpStatusCode.OK);
+        var list2 = await listResponse2.Content.ReadFromJsonAsync<List<CourseDto>>();
+        var cachedCourse = list2!.First(x => x.Id == createdCourse!.Id);
+        cachedCourse.Title.Should().Be("Caching Test Course"); // Proves cache hit!
+
+        // 6. Mutate via API (Create another course) which should invalidate cache
+        var createRequest2 = new CreateCourseRequest("Another Course", "Desc");
+        var createResponse2 = await _client.PostAsJsonAsync("/api/v1/courses", createRequest2);
+        createResponse2.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // 7. Fetch all courses again. Cache should have been invalidated, returning the fresh DB data with "Directly Edited Title"!
+        var listResponse3 = await _client.GetAsync("/api/v1/courses");
+        listResponse3.StatusCode.Should().Be(HttpStatusCode.OK);
+        var list3 = await listResponse3.Content.ReadFromJsonAsync<List<CourseDto>>();
+        var freshCourse = list3!.First(x => x.Id == createdCourse!.Id);
+        freshCourse.Title.Should().Be("Directly Edited Title"); // Proves cache was invalidated and reloaded!
     }
 }

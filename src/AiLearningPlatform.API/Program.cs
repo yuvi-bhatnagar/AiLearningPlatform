@@ -14,17 +14,33 @@ using AiLearningPlatform.Application.Features.Courses;
 using AiLearningPlatform.Application.Features.Quizzes;
 using AiLearningPlatform.Application.Features.Questions;
 using AiLearningPlatform.Application.Features.Attempts;
+using AiLearningPlatform.Application.Features.Leaderboards;
+using AiLearningPlatform.Application.Features.Leaderboards.Jobs;
 using AiLearningPlatform.Infrastructure.Data;
 using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
 using AiLearningPlatform.Infrastructure.Services;
 using AiLearningPlatform.API.Middleware;
+using Serilog;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration));
 
 // ============================================================
 // 1. DATABASE
 // ============================================================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalClient", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 // Why: AppDbContext is the EF Core bridge between our C# entities and SQL Server.
 // Registered as Scoped — a new instance per HTTP request (important for EF Core).
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -120,12 +136,25 @@ builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IAttemptRepository, AttemptRepository>();
 
 // Services
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("RedisConnection");
+});
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAttemptService, AttemptService>();
 builder.Services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
 builder.Services.AddScoped<IAiGradingJob, AiGradingJob>();
+builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
+builder.Services.AddScoped<INightlyMaintenanceJob, NightlyMaintenanceJob>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+
+builder.Services.AddHealthChecks()
+    .AddSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")!, name: "sqlserver")
+    .AddRedis(builder.Configuration.GetConnectionString("RedisConnection")!, name: "redis")
+    .AddCheck<AiLearningPlatform.Infrastructure.BackgroundJobs.HangfireHealthCheck>("hangfire");
 
 // Hangfire services
 builder.Services.AddHangfire(configuration => configuration
@@ -242,6 +271,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // ORDER IS CRITICAL: Authentication → Authorization
+app.UseCors("AllowLocalClient");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
@@ -252,6 +282,26 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 });
 
 app.MapControllers();
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(x => new
+            {
+                component = x.Key,
+                status = x.Value.Status.ToString(),
+                description = x.Value.Description ?? x.Value.Exception?.Message
+            }),
+            duration = report.TotalDuration
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+    }
+});
 
 // ============================================================
 // 7. ADMIN SEED
@@ -292,6 +342,20 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
 
         Console.WriteLine($"[Seed] Admin user created: {adminEmail}");
+    }
+
+    // Schedule nightly maintenance recurring Hangfire job
+    try
+    {
+        var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        recurringJobManager.AddOrUpdate<AiLearningPlatform.Application.Features.Leaderboards.Jobs.INightlyMaintenanceJob>(
+            "nightly-maintenance",
+            job => job.RunNightlyMaintenanceAsync(),
+            Cron.Daily());
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Hangfire] Failed to schedule nightly maintenance job: {ex.Message}");
     }
 }
 

@@ -10,6 +10,8 @@ using AiLearningPlatform.Domain.Entities;
 using AiLearningPlatform.Domain.Enums;
 using AiLearningPlatform.Domain.Exceptions;
 
+using Microsoft.Extensions.Caching.Distributed;
+
 namespace AiLearningPlatform.Application.Tests;
 
 public class AttemptServiceTests
@@ -18,6 +20,8 @@ public class AttemptServiceTests
     private readonly Mock<IQuizRepository> _quizRepoMock = new();
     private readonly Mock<ICourseRepository> _courseRepoMock = new();
     private readonly Mock<IBackgroundJobService> _backgroundJobServiceMock = new();
+    private readonly Mock<IDistributedCache> _cacheMock = new();
+    private readonly Mock<IAuditLogService> _auditLogMock = new();
     private readonly AttemptService _attemptService;
 
     public AttemptServiceTests()
@@ -31,7 +35,9 @@ public class AttemptServiceTests
             _courseRepoMock.Object,
             _backgroundJobServiceMock.Object,
             startValidator,
-            submitValidator
+            submitValidator,
+            _cacheMock.Object,
+            _auditLogMock.Object
         );
     }
 
@@ -298,18 +304,113 @@ public class AttemptServiceTests
     {
         // Arrange
         var attemptId = Guid.NewGuid();
-        var attempt = new Attempt { Id = attemptId, UserId = Guid.NewGuid(), Quiz = new Quiz { CourseId = Guid.NewGuid() } };
+        var otherUserId = Guid.NewGuid();
+        var quiz = new Quiz { CourseId = Guid.NewGuid() };
+        var course = new Course { InstructorId = Guid.NewGuid() };
+        var attempt = new Attempt { Id = attemptId, UserId = Guid.NewGuid(), Quiz = quiz };
 
         _attemptRepoMock.Setup(repo => repo.GetByIdAsync(attemptId))
             .ReturnsAsync(attempt);
-        _courseRepoMock.Setup(repo => repo.GetByIdAsync(attempt.Quiz.CourseId))
-            .ReturnsAsync(new Course { InstructorId = Guid.NewGuid() }); // Different instructor
+        _courseRepoMock.Setup(repo => repo.GetByIdAsync(quiz.CourseId))
+            .ReturnsAsync(course);
 
         // Act
-        var act = () => _attemptService.GetAttemptByIdAsync(attemptId, Guid.NewGuid(), "Student");
+        var act = () => _attemptService.GetAttemptByIdAsync(attemptId, otherUserId, "Student");
 
         // Assert
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task SubmitAttemptAsync_FirstAttempt_ShouldSetStreakTo1()
+    {
+        // Arrange
+        var attemptId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var quiz = new Quiz { Id = Guid.NewGuid(), Questions = new List<Question>() };
+        var attempt = new Attempt { Id = attemptId, UserId = userId, Status = AttemptStatus.InProgress, Quiz = quiz };
+        var user = new User { Id = userId, Streak = 0, LastAttemptDateUtc = null };
+
+        _attemptRepoMock.Setup(repo => repo.GetByIdAsync(attemptId)).ReturnsAsync(attempt);
+        _attemptRepoMock.Setup(repo => repo.GetUserByIdAsync(userId)).ReturnsAsync(user);
+
+        var request = new SubmitAttemptRequest(new List<SubmitAnswerDto>());
+
+        // Act
+        await _attemptService.SubmitAttemptAsync(attemptId, request, userId);
+
+        // Assert
+        user.Streak.Should().Be(1);
+        user.LastAttemptDateUtc.Should().NotBeNull();
+        user.LastAttemptDateUtc!.Value.Date.Should().Be(DateTime.UtcNow.Date);
+    }
+
+    [Fact]
+    public async Task SubmitAttemptAsync_AttemptYesterday_ShouldIncrementStreak()
+    {
+        // Arrange
+        var attemptId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var quiz = new Quiz { Id = Guid.NewGuid(), Questions = new List<Question>() };
+        var attempt = new Attempt { Id = attemptId, UserId = userId, Status = AttemptStatus.InProgress, Quiz = quiz };
+        var user = new User { Id = userId, Streak = 3, LastAttemptDateUtc = DateTime.UtcNow.AddDays(-1) };
+
+        _attemptRepoMock.Setup(repo => repo.GetByIdAsync(attemptId)).ReturnsAsync(attempt);
+        _attemptRepoMock.Setup(repo => repo.GetUserByIdAsync(userId)).ReturnsAsync(user);
+
+        var request = new SubmitAttemptRequest(new List<SubmitAnswerDto>());
+
+        // Act
+        await _attemptService.SubmitAttemptAsync(attemptId, request, userId);
+
+        // Assert
+        user.Streak.Should().Be(4);
+        user.LastAttemptDateUtc!.Value.Date.Should().Be(DateTime.UtcNow.Date);
+    }
+
+    [Fact]
+    public async Task SubmitAttemptAsync_AttemptToday_ShouldNotChangeStreak()
+    {
+        // Arrange
+        var attemptId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var quiz = new Quiz { Id = Guid.NewGuid(), Questions = new List<Question>() };
+        var attempt = new Attempt { Id = attemptId, UserId = userId, Status = AttemptStatus.InProgress, Quiz = quiz };
+        var user = new User { Id = userId, Streak = 3, LastAttemptDateUtc = DateTime.UtcNow };
+
+        _attemptRepoMock.Setup(repo => repo.GetByIdAsync(attemptId)).ReturnsAsync(attempt);
+        _attemptRepoMock.Setup(repo => repo.GetUserByIdAsync(userId)).ReturnsAsync(user);
+
+        var request = new SubmitAttemptRequest(new List<SubmitAnswerDto>());
+
+        // Act
+        await _attemptService.SubmitAttemptAsync(attemptId, request, userId);
+
+        // Assert
+        user.Streak.Should().Be(3); // untouched
+    }
+
+    [Fact]
+    public async Task SubmitAttemptAsync_AttemptTwoDaysAgo_ShouldResetStreakTo1()
+    {
+        // Arrange
+        var attemptId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var quiz = new Quiz { Id = Guid.NewGuid(), Questions = new List<Question>() };
+        var attempt = new Attempt { Id = attemptId, UserId = userId, Status = AttemptStatus.InProgress, Quiz = quiz };
+        var user = new User { Id = userId, Streak = 3, LastAttemptDateUtc = DateTime.UtcNow.AddDays(-2) };
+
+        _attemptRepoMock.Setup(repo => repo.GetByIdAsync(attemptId)).ReturnsAsync(attempt);
+        _attemptRepoMock.Setup(repo => repo.GetUserByIdAsync(userId)).ReturnsAsync(user);
+
+        var request = new SubmitAttemptRequest(new List<SubmitAnswerDto>());
+
+        // Act
+        await _attemptService.SubmitAttemptAsync(attemptId, request, userId);
+
+        // Assert
+        user.Streak.Should().Be(1); // reset to 1
+        user.LastAttemptDateUtc!.Value.Date.Should().Be(DateTime.UtcNow.Date);
     }
 
     [Fact]

@@ -22,17 +22,20 @@ public class AuthController : ControllerBase
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
     private readonly IConfiguration _configuration;
+    private readonly IAuditLogService _auditLogService;
 
     public AuthController(
         AppDbContext db,
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IAuditLogService auditLogService)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _configuration = configuration;
+        _auditLogService = auditLogService;
     }
 
     // ============================================================
@@ -83,6 +86,8 @@ public class AuthController : ControllerBase
         user.RefreshTokenExpiryUtc = DateTime.UtcNow.AddDays(refreshExpiry);
         await _db.SaveChangesAsync();
 
+        await _auditLogService.LogActionAsync("Registration", $"User '{user.Username}' registered with role '{user.Role}'.");
+
         return Ok(new AuthResponse(
             user.Id,
             user.Username,
@@ -116,6 +121,8 @@ public class AuthController : ControllerBase
         user.RefreshToken = refreshToken;
         user.RefreshTokenExpiryUtc = DateTime.UtcNow.AddDays(refreshExpiry);
         await _db.SaveChangesAsync();
+
+        await _auditLogService.LogActionAsync("Login", $"User '{user.Username}' logged in successfully.");
 
         return Ok(new AuthResponse(
             user.Id,

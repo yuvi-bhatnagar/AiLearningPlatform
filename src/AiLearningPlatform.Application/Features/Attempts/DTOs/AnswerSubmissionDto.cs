@@ -5,5 +5,6 @@ public record AnswerSubmissionDto(
     string StudentAnswer,
     bool? IsCorrect,
     double? Score,
-    string? Feedback
+    string? Feedback,
+    string? Confidence
 );

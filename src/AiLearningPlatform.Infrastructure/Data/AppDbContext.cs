@@ -16,6 +16,9 @@ public class AppDbContext : DbContext
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<AnswerSubmission> AnswerSubmissions => Set<AnswerSubmission>();
+    public DbSet<LeaderboardRow> Leaderboard => Set<LeaderboardRow>();
+    public DbSet<StudentPerformanceSummary> StudentPerformanceSummaries => Set<StudentPerformanceSummary>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +95,9 @@ public class AppDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(20);
 
+            entity.HasIndex(a => a.UserId);
+            entity.HasIndex(a => a.QuizId);
+
             // Quiz -> Attempts (1-to-many)
             entity.HasOne(a => a.Quiz)
                 .WithMany(q => q.Attempts)
@@ -111,6 +117,7 @@ public class AppDbContext : DbContext
             entity.HasKey(asub => asub.Id);
             entity.Property(asub => asub.StudentAnswer).IsRequired(); // Could be long text, no max length
             entity.Property(asub => asub.Feedback).HasMaxLength(2000);
+            entity.Property(asub => asub.Confidence).HasMaxLength(20);
 
             // Attempt -> AnswerSubmissions (1-to-many)
             entity.HasOne(asub => asub.Attempt)
@@ -123,6 +130,35 @@ public class AppDbContext : DbContext
                 .WithMany(q => q.AnswerSubmissions)
                 .HasForeignKey(asub => asub.QuestionId)
                 .OnDelete(DeleteBehavior.Restrict); // Avoid multiple cascade paths
+        });
+
+        // 7. LeaderboardRow Configuration (Keyless Entity mapped to View)
+        modelBuilder.Entity<LeaderboardRow>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToView("LeaderboardView");
+        });
+
+        // 8. StudentPerformanceSummary Configuration (Keyless Entity mapped to Stored Proc)
+        modelBuilder.Entity<StudentPerformanceSummary>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToTable((string)null!);
+        });
+
+        // 9. AuditLog Configuration
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(al => al.Id);
+            entity.Property(al => al.Action).IsRequired().HasMaxLength(100);
+            entity.Property(al => al.Details).HasMaxLength(4000);
+            entity.Property(al => al.IpAddress).HasMaxLength(50);
+            entity.Property(al => al.TimestampUtc).IsRequired();
+
+            entity.HasOne(al => al.User)
+                .WithMany()
+                .HasForeignKey(al => al.UserId)
+                .OnDelete(DeleteBehavior.SetNull); // Preserve logs if user is deleted
         });
     }
 }

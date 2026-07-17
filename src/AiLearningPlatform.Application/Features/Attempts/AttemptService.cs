@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.Extensions.Caching.Distributed;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.Attempts.DTOs;
 using AiLearningPlatform.Domain.Entities;
@@ -16,6 +17,8 @@ public class AttemptService : IAttemptService
     private readonly IBackgroundJobService _backgroundJobService;
     private readonly IValidator<StartAttemptRequest> _startValidator;
     private readonly IValidator<SubmitAttemptRequest> _submitValidator;
+    private readonly IDistributedCache _cache;
+    private readonly IAuditLogService _auditLogService;
 
     public AttemptService(
         IAttemptRepository attemptRepository,
@@ -23,7 +26,9 @@ public class AttemptService : IAttemptService
         ICourseRepository courseRepository,
         IBackgroundJobService backgroundJobService,
         IValidator<StartAttemptRequest> startValidator,
-        IValidator<SubmitAttemptRequest> submitValidator)
+        IValidator<SubmitAttemptRequest> submitValidator,
+        IDistributedCache cache,
+        IAuditLogService auditLogService)
     {
         _attemptRepository = attemptRepository;
         _quizRepository = quizRepository;
@@ -31,6 +36,8 @@ public class AttemptService : IAttemptService
         _backgroundJobService = backgroundJobService;
         _startValidator = startValidator;
         _submitValidator = submitValidator;
+        _cache = cache;
+        _auditLogService = auditLogService;
     }
 
     public async Task<AttemptDto> StartAttemptAsync(Guid quizId, Guid userId)
@@ -67,6 +74,8 @@ public class AttemptService : IAttemptService
 
         await _attemptRepository.AddAsync(attempt);
         await _attemptRepository.SaveChangesAsync();
+
+        await _auditLogService.LogActionAsync("QuizStart", $"Attempt {attempt.Id} started for Quiz {quizId}.");
 
         return MapToAttemptDto(attempt);
     }
@@ -156,11 +165,45 @@ public class AttemptService : IAttemptService
             attempt.Score = totalScore;
         }
 
+        // Update student streak
+        var user = await _attemptRepository.GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            var now = DateTime.UtcNow;
+            if (user.LastAttemptDateUtc.HasValue)
+            {
+                var lastDate = user.LastAttemptDateUtc.Value.Date;
+                var todayDate = now.Date;
+                var yesterdayDate = todayDate.AddDays(-1);
+
+                if (lastDate == yesterdayDate)
+                {
+                    user.Streak += 1;
+                }
+                else if (lastDate < yesterdayDate)
+                {
+                    user.Streak = 1;
+                }
+                // If lastDate == todayDate, do nothing (streak is already updated today)
+            }
+            else
+            {
+                user.Streak = 1;
+            }
+            user.LastAttemptDateUtc = now;
+        }
+
         await _attemptRepository.SaveChangesAsync();
+
+        await _auditLogService.LogActionAsync("QuizSubmit", $"Attempt {attempt.Id} submitted. HasSubjective: {hasSubjective}.");
 
         if (hasSubjective)
         {
             _backgroundJobService.EnqueueGradingJob(attempt.Id);
+        }
+        else
+        {
+            await _cache.RemoveAsync("LeaderboardData");
         }
 
         return MapToResultDto(attempt);
@@ -183,6 +226,78 @@ public class AttemptService : IAttemptService
         }
 
         return MapToResultDto(attempt);
+    }
+
+    public async Task<IEnumerable<AttemptResultDto>> GetAttemptsByUserIdAsync(Guid userId)
+    {
+        var attempts = await _attemptRepository.GetByUserIdAsync(userId);
+        return attempts.Select(MapToResultDto).ToList();
+    }
+
+    public async Task<AttemptResultDto> OverrideSubmissionGradeAsync(Guid attemptId, OverrideGradeRequest request, Guid teacherId)
+    {
+        var attempt = await _attemptRepository.GetByIdAsync(attemptId);
+        if (attempt is null)
+            throw new NotFoundException(nameof(Attempt), attemptId);
+
+        // Security check: Only the course teacher can override grades
+        var course = await _courseRepository.GetByIdAsync(attempt.Quiz.CourseId);
+        if (course is null || course.InstructorId != teacherId)
+        {
+            throw new UnauthorizedAccessException("Only the instructor of the course can override grades.");
+        }
+
+        var submission = attempt.AnswerSubmissions.FirstOrDefault(s => s.QuestionId == request.QuestionId);
+        if (submission is null)
+            throw new NotFoundException(nameof(AnswerSubmission), request.QuestionId);
+
+        submission.Score = request.Score;
+        submission.Feedback = request.Feedback;
+        submission.IsCorrect = request.Score >= (submission.Question.Points / 2.0);
+        submission.Confidence = "ManualOverride";
+
+        // Recalculate total score
+        attempt.Score = attempt.AnswerSubmissions.Sum(s => s.Score ?? 0);
+
+        await _attemptRepository.SaveChangesAsync();
+        await _cache.RemoveAsync("LeaderboardData");
+
+        return MapToResultDto(attempt);
+    }
+
+    public async Task<IEnumerable<TeacherReviewDto>> GetLowConfidenceReviewsAsync(Guid teacherId)
+    {
+        var attempts = await _attemptRepository.GetLowConfidenceAttemptsByInstructorAsync(teacherId);
+        var reviews = new List<TeacherReviewDto>();
+
+        foreach (var attempt in attempts)
+        {
+            var studentName = attempt.User?.Username ?? "Unknown";
+            var quizTitle = attempt.Quiz?.Title ?? "Unknown";
+
+            foreach (var sub in attempt.AnswerSubmissions)
+            {
+                if (sub.Confidence == "Low")
+                {
+                    reviews.Add(new TeacherReviewDto(
+                        attempt.Id,
+                        attempt.QuizId,
+                        studentName,
+                        quizTitle,
+                        sub.QuestionId,
+                        sub.Question?.Text ?? "Unknown",
+                        sub.StudentAnswer,
+                        sub.Question?.CorrectAnswer ?? "Unknown",
+                        sub.Score,
+                        sub.Question?.Points ?? 0,
+                        sub.Feedback,
+                        sub.Confidence
+                    ));
+                }
+            }
+        }
+
+        return reviews;
     }
 
     private static AttemptDto MapToAttemptDto(Attempt attempt)
@@ -220,7 +335,8 @@ public class AttemptService : IAttemptService
             ans.StudentAnswer,
             ans.IsCorrect,
             ans.Score,
-            ans.Feedback
+            ans.Feedback,
+            ans.Confidence
         )).ToList();
 
         return new AttemptResultDto(
