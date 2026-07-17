@@ -35,3 +35,12 @@ Thumbs.db
 # Gemini
 [Gg]emini.md
 [Gg]emini.md.user
+
+# Secrets — never commit real config files with secrets
+# Developers should copy *.example.json → *.json and fill in their own values
+# In production, use environment variables instead of appsettings files
+appsettings.json
+appsettings.*.json
+# Allow the example templates to be committed
+!appsettings.example.json
+!appsettings.*.example.json
