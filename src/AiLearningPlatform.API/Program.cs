@@ -21,8 +21,13 @@ using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
 using AiLearningPlatform.Infrastructure.Services;
 using AiLearningPlatform.API.Middleware;
+using Serilog;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration));
 
 // ============================================================
 // 1. DATABASE
@@ -134,6 +139,13 @@ builder.Services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>(
 builder.Services.AddScoped<IAiGradingJob, AiGradingJob>();
 builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<INightlyMaintenanceJob, NightlyMaintenanceJob>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+
+builder.Services.AddHealthChecks()
+    .AddSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")!, name: "sqlserver")
+    .AddRedis(builder.Configuration.GetConnectionString("RedisConnection")!, name: "redis")
+    .AddCheck<AiLearningPlatform.Infrastructure.BackgroundJobs.HangfireHealthCheck>("hangfire");
 
 // Hangfire services
 builder.Services.AddHangfire(configuration => configuration
@@ -260,6 +272,26 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 });
 
 app.MapControllers();
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(x => new
+            {
+                component = x.Key,
+                status = x.Value.Status.ToString(),
+                description = x.Value.Description ?? x.Value.Exception?.Message
+            }),
+            duration = report.TotalDuration
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+    }
+});
 
 // ============================================================
 // 7. ADMIN SEED

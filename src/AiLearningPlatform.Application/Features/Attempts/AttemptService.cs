@@ -18,6 +18,7 @@ public class AttemptService : IAttemptService
     private readonly IValidator<StartAttemptRequest> _startValidator;
     private readonly IValidator<SubmitAttemptRequest> _submitValidator;
     private readonly IDistributedCache _cache;
+    private readonly IAuditLogService _auditLogService;
 
     public AttemptService(
         IAttemptRepository attemptRepository,
@@ -26,7 +27,8 @@ public class AttemptService : IAttemptService
         IBackgroundJobService backgroundJobService,
         IValidator<StartAttemptRequest> startValidator,
         IValidator<SubmitAttemptRequest> submitValidator,
-        IDistributedCache cache)
+        IDistributedCache cache,
+        IAuditLogService auditLogService)
     {
         _attemptRepository = attemptRepository;
         _quizRepository = quizRepository;
@@ -35,6 +37,7 @@ public class AttemptService : IAttemptService
         _startValidator = startValidator;
         _submitValidator = submitValidator;
         _cache = cache;
+        _auditLogService = auditLogService;
     }
 
     public async Task<AttemptDto> StartAttemptAsync(Guid quizId, Guid userId)
@@ -71,6 +74,8 @@ public class AttemptService : IAttemptService
 
         await _attemptRepository.AddAsync(attempt);
         await _attemptRepository.SaveChangesAsync();
+
+        await _auditLogService.LogActionAsync("QuizStart", $"Attempt {attempt.Id} started for Quiz {quizId}.");
 
         return MapToAttemptDto(attempt);
     }
@@ -189,6 +194,8 @@ public class AttemptService : IAttemptService
         }
 
         await _attemptRepository.SaveChangesAsync();
+
+        await _auditLogService.LogActionAsync("QuizSubmit", $"Attempt {attempt.Id} submitted. HasSubjective: {hasSubjective}.");
 
         if (hasSubjective)
         {

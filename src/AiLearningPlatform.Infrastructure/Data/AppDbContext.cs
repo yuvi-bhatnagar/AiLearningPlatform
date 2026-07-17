@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<AnswerSubmission> AnswerSubmissions => Set<AnswerSubmission>();
     public DbSet<LeaderboardRow> Leaderboard => Set<LeaderboardRow>();
     public DbSet<StudentPerformanceSummary> StudentPerformanceSummaries => Set<StudentPerformanceSummary>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -142,6 +143,21 @@ public class AppDbContext : DbContext
         {
             entity.HasNoKey();
             entity.ToTable((string)null!);
+        });
+
+        // 9. AuditLog Configuration
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(al => al.Id);
+            entity.Property(al => al.Action).IsRequired().HasMaxLength(100);
+            entity.Property(al => al.Details).HasMaxLength(4000);
+            entity.Property(al => al.IpAddress).HasMaxLength(50);
+            entity.Property(al => al.TimestampUtc).IsRequired();
+
+            entity.HasOne(al => al.User)
+                .WithMany()
+                .HasForeignKey(al => al.UserId)
+                .OnDelete(DeleteBehavior.SetNull); // Preserve logs if user is deleted
         });
     }
 }

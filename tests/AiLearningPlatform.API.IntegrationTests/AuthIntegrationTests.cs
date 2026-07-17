@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Testcontainers.MsSql;
 using Testcontainers.Redis;
@@ -61,6 +62,9 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("ConnectionStrings:DefaultConnection", _dbContainer.GetConnectionString());
+        builder.UseSetting("ConnectionStrings:RedisConnection", _redisContainer.GetConnectionString());
+
         builder.ConfigureServices(services =>
         {
             // Remove the real SQL Server DbContextOptions registration
@@ -73,18 +77,6 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddDbContext<AppDbContext>(options =>
             {
                 options.UseSqlServer(_dbContainer.GetConnectionString());
-            });
-
-            // Remove the real Redis cache registration if it exists
-            var redisDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(IDistributedCache));
-            if (redisDescriptor != null)
-                services.Remove(redisDescriptor);
-
-            // Re-register Redis cache using the Testcontainers connection string
-            services.AddStackExchangeRedisCache(options =>
-            {
-                options.Configuration = _redisContainer.GetConnectionString();
             });
 
             // Mock IAiService for all integration tests to prevent calling the actual Gemini API

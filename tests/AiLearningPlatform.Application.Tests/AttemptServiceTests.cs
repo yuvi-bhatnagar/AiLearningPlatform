@@ -21,6 +21,7 @@ public class AttemptServiceTests
     private readonly Mock<ICourseRepository> _courseRepoMock = new();
     private readonly Mock<IBackgroundJobService> _backgroundJobServiceMock = new();
     private readonly Mock<IDistributedCache> _cacheMock = new();
+    private readonly Mock<IAuditLogService> _auditLogMock = new();
     private readonly AttemptService _attemptService;
 
     public AttemptServiceTests()
@@ -35,7 +36,8 @@ public class AttemptServiceTests
             _backgroundJobServiceMock.Object,
             startValidator,
             submitValidator,
-            _cacheMock.Object
+            _cacheMock.Object,
+            _auditLogMock.Object
         );
     }
 
