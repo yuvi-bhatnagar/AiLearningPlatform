@@ -14,6 +14,8 @@ using AiLearningPlatform.Application.Features.Courses;
 using AiLearningPlatform.Application.Features.Quizzes;
 using AiLearningPlatform.Application.Features.Questions;
 using AiLearningPlatform.Application.Features.Attempts;
+using AiLearningPlatform.Application.Features.Leaderboards;
+using AiLearningPlatform.Application.Features.Leaderboards.Jobs;
 using AiLearningPlatform.Infrastructure.Data;
 using AiLearningPlatform.Infrastructure.Data.Repositories;
 using AiLearningPlatform.Infrastructure.Security;
@@ -120,12 +122,15 @@ builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IAttemptRepository, AttemptRepository>();
 
 // Services
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAttemptService, AttemptService>();
 builder.Services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
 builder.Services.AddScoped<IAiGradingJob, AiGradingJob>();
+builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
+builder.Services.AddScoped<INightlyMaintenanceJob, NightlyMaintenanceJob>();
 
 // Hangfire services
 builder.Services.AddHangfire(configuration => configuration
@@ -292,6 +297,20 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
 
         Console.WriteLine($"[Seed] Admin user created: {adminEmail}");
+    }
+
+    // Schedule nightly maintenance recurring Hangfire job
+    try
+    {
+        var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        recurringJobManager.AddOrUpdate<AiLearningPlatform.Application.Features.Leaderboards.Jobs.INightlyMaintenanceJob>(
+            "nightly-maintenance",
+            job => job.RunNightlyMaintenanceAsync(),
+            Cron.Daily());
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Hangfire] Failed to schedule nightly maintenance job: {ex.Message}");
     }
 }
 

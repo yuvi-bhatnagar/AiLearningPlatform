@@ -156,6 +156,34 @@ public class AttemptService : IAttemptService
             attempt.Score = totalScore;
         }
 
+        // Update student streak
+        var user = await _attemptRepository.GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            var now = DateTime.UtcNow;
+            if (user.LastAttemptDateUtc.HasValue)
+            {
+                var lastDate = user.LastAttemptDateUtc.Value.Date;
+                var todayDate = now.Date;
+                var yesterdayDate = todayDate.AddDays(-1);
+
+                if (lastDate == yesterdayDate)
+                {
+                    user.Streak += 1;
+                }
+                else if (lastDate < yesterdayDate)
+                {
+                    user.Streak = 1;
+                }
+                // If lastDate == todayDate, do nothing (streak is already updated today)
+            }
+            else
+            {
+                user.Streak = 1;
+            }
+            user.LastAttemptDateUtc = now;
+        }
+
         await _attemptRepository.SaveChangesAsync();
 
         if (hasSubjective)

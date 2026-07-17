@@ -24,6 +24,7 @@ public class QuestionRepository : IQuestionRepository
     public async Task<IEnumerable<Question>> GetByQuizIdAsync(Guid quizId)
     {
         return await _context.Questions
+            .AsNoTracking()
             .Where(q => q.QuizId == quizId)
             .ToListAsync();
     }

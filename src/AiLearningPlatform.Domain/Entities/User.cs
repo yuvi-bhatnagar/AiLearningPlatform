@@ -15,6 +15,10 @@ public class User
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiryUtc { get; set; }
 
+    // Streak tracking
+    public int Streak { get; set; } = 0;
+    public DateTime? LastAttemptDateUtc { get; set; }
+
     // Navigation properties
     public ICollection<Course> AuthoredCourses { get; set; } = new List<Course>();
     public ICollection<Attempt> QuizAttempts { get; set; } = new List<Attempt>();

@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<AnswerSubmission> AnswerSubmissions => Set<AnswerSubmission>();
+    public DbSet<LeaderboardRow> Leaderboard => Set<LeaderboardRow>();
+    public DbSet<StudentPerformanceSummary> StudentPerformanceSummaries => Set<StudentPerformanceSummary>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +94,9 @@ public class AppDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(20);
 
+            entity.HasIndex(a => a.UserId);
+            entity.HasIndex(a => a.QuizId);
+
             // Quiz -> Attempts (1-to-many)
             entity.HasOne(a => a.Quiz)
                 .WithMany(q => q.Attempts)
@@ -123,6 +128,20 @@ public class AppDbContext : DbContext
                 .WithMany(q => q.AnswerSubmissions)
                 .HasForeignKey(asub => asub.QuestionId)
                 .OnDelete(DeleteBehavior.Restrict); // Avoid multiple cascade paths
+        });
+
+        // 7. LeaderboardRow Configuration (Keyless Entity mapped to View)
+        modelBuilder.Entity<LeaderboardRow>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToView("LeaderboardView");
+        });
+
+        // 8. StudentPerformanceSummary Configuration (Keyless Entity mapped to Stored Proc)
+        modelBuilder.Entity<StudentPerformanceSummary>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToTable((string)null!);
         });
     }
 }
