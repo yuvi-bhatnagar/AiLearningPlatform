@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.Extensions.Caching.Distributed;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.Attempts.DTOs;
 using AiLearningPlatform.Domain.Entities;
@@ -16,6 +17,7 @@ public class AttemptService : IAttemptService
     private readonly IBackgroundJobService _backgroundJobService;
     private readonly IValidator<StartAttemptRequest> _startValidator;
     private readonly IValidator<SubmitAttemptRequest> _submitValidator;
+    private readonly IDistributedCache _cache;
 
     public AttemptService(
         IAttemptRepository attemptRepository,
@@ -23,7 +25,8 @@ public class AttemptService : IAttemptService
         ICourseRepository courseRepository,
         IBackgroundJobService backgroundJobService,
         IValidator<StartAttemptRequest> startValidator,
-        IValidator<SubmitAttemptRequest> submitValidator)
+        IValidator<SubmitAttemptRequest> submitValidator,
+        IDistributedCache cache)
     {
         _attemptRepository = attemptRepository;
         _quizRepository = quizRepository;
@@ -31,6 +34,7 @@ public class AttemptService : IAttemptService
         _backgroundJobService = backgroundJobService;
         _startValidator = startValidator;
         _submitValidator = submitValidator;
+        _cache = cache;
     }
 
     public async Task<AttemptDto> StartAttemptAsync(Guid quizId, Guid userId)
@@ -189,6 +193,10 @@ public class AttemptService : IAttemptService
         if (hasSubjective)
         {
             _backgroundJobService.EnqueueGradingJob(attempt.Id);
+        }
+        else
+        {
+            await _cache.RemoveAsync("LeaderboardData");
         }
 
         return MapToResultDto(attempt);

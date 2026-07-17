@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Caching.Distributed;
 using Moq;
 using Testcontainers.MsSql;
+using Testcontainers.Redis;
 using Xunit;
 using AiLearningPlatform.Application.Common.Interfaces;
 using AiLearningPlatform.Application.Features.AI.DTOs;
@@ -36,9 +38,12 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     private readonly MsSqlContainer _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
         .Build();
 
+    private readonly RedisContainer _redisContainer = new RedisBuilder("redis:alpine")
+        .Build();
+
     public async Task InitializeAsync()
     {
-        await _dbContainer.StartAsync();
+        await Task.WhenAll(_dbContainer.StartAsync(), _redisContainer.StartAsync());
 
         // Apply migrations to setup schema in the container
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -51,7 +56,7 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public new async Task DisposeAsync()
     {
-        await _dbContainer.DisposeAsync().AsTask();
+        await Task.WhenAll(_dbContainer.DisposeAsync().AsTask(), _redisContainer.DisposeAsync().AsTask());
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -68,6 +73,18 @@ public class AuthTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddDbContext<AppDbContext>(options =>
             {
                 options.UseSqlServer(_dbContainer.GetConnectionString());
+            });
+
+            // Remove the real Redis cache registration if it exists
+            var redisDescriptor = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IDistributedCache));
+            if (redisDescriptor != null)
+                services.Remove(redisDescriptor);
+
+            // Re-register Redis cache using the Testcontainers connection string
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = _redisContainer.GetConnectionString();
             });
 
             // Mock IAiService for all integration tests to prevent calling the actual Gemini API

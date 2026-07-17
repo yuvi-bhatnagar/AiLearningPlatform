@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
+using AiLearningPlatform.Application.Common.Extensions;
 using AiLearningPlatform.Application.Features.Leaderboards;
 using AiLearningPlatform.Application.Features.Leaderboards.DTOs;
 using AiLearningPlatform.Infrastructure.Data;
@@ -9,10 +10,10 @@ namespace AiLearningPlatform.Infrastructure.Services;
 public class LeaderboardService : ILeaderboardService
 {
     private readonly AppDbContext _context;
-    private readonly IMemoryCache _cache;
+    private readonly IDistributedCache _cache;
     private const string LeaderboardCacheKey = "LeaderboardData";
 
-    public LeaderboardService(AppDbContext context, IMemoryCache cache)
+    public LeaderboardService(AppDbContext context, IDistributedCache cache)
     {
         _context = context;
         _cache = cache;
@@ -20,18 +21,21 @@ public class LeaderboardService : ILeaderboardService
 
     public async Task<List<LeaderboardRowDto>> GetLeaderboardAsync()
     {
-        return await _cache.GetOrCreateAsync(LeaderboardCacheKey, async entry =>
+        var cached = await _cache.GetRecordAsync<List<LeaderboardRowDto>>(LeaderboardCacheKey);
+        if (cached is not null)
         {
-            // Cache absolute expiration set to 24 hours
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24);
-            return await FetchLeaderboardFromDbAsync();
-        }) ?? new List<LeaderboardRowDto>();
+            return cached;
+        }
+
+        var data = await FetchLeaderboardFromDbAsync();
+        await _cache.SetRecordAsync(LeaderboardCacheKey, data, TimeSpan.FromHours(24));
+        return data;
     }
 
     public async Task<List<LeaderboardRowDto>> RecomputeLeaderboardCacheAsync()
     {
         var data = await FetchLeaderboardFromDbAsync();
-        _cache.Set(LeaderboardCacheKey, data, TimeSpan.FromHours(24));
+        await _cache.SetRecordAsync(LeaderboardCacheKey, data, TimeSpan.FromHours(24));
         return data;
     }
 

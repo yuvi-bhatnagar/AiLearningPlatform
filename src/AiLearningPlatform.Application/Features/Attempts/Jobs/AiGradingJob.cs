@@ -1,4 +1,5 @@
 using AiLearningPlatform.Application.Common.Interfaces;
+using Microsoft.Extensions.Caching.Distributed;
 using AiLearningPlatform.Domain.Enums;
 
 namespace AiLearningPlatform.Application.Features.Attempts.Jobs;
@@ -7,11 +8,13 @@ public class AiGradingJob : IAiGradingJob
 {
     private readonly IAttemptRepository _attemptRepository;
     private readonly IAiService _aiService;
+    private readonly IDistributedCache _cache;
 
-    public AiGradingJob(IAttemptRepository attemptRepository, IAiService aiService)
+    public AiGradingJob(IAttemptRepository attemptRepository, IAiService aiService, IDistributedCache cache)
     {
         _attemptRepository = attemptRepository;
         _aiService = aiService;
+        _cache = cache;
     }
 
     public async Task GradeSubjectiveAnswersAsync(Guid attemptId)
@@ -64,5 +67,6 @@ public class AiGradingJob : IAiGradingJob
         attempt.Score = totalScore;
 
         await _attemptRepository.SaveChangesAsync();
+        await _cache.RemoveAsync("LeaderboardData");
     }
 }

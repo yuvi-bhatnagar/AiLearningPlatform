@@ -10,6 +10,8 @@ using AiLearningPlatform.Domain.Entities;
 using AiLearningPlatform.Domain.Enums;
 using AiLearningPlatform.Domain.Exceptions;
 
+using Microsoft.Extensions.Caching.Distributed;
+
 namespace AiLearningPlatform.Application.Tests;
 
 public class AttemptServiceTests
@@ -18,6 +20,7 @@ public class AttemptServiceTests
     private readonly Mock<IQuizRepository> _quizRepoMock = new();
     private readonly Mock<ICourseRepository> _courseRepoMock = new();
     private readonly Mock<IBackgroundJobService> _backgroundJobServiceMock = new();
+    private readonly Mock<IDistributedCache> _cacheMock = new();
     private readonly AttemptService _attemptService;
 
     public AttemptServiceTests()
@@ -31,7 +34,8 @@ public class AttemptServiceTests
             _courseRepoMock.Object,
             _backgroundJobServiceMock.Object,
             startValidator,
-            submitValidator
+            submitValidator,
+            _cacheMock.Object
         );
     }
 
