@@ -72,7 +72,7 @@ const QuizResult = () => {
         
         <div style={{ margin: '24px 0', display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: '4px' }}>
           <span style={{ fontSize: '64px', fontWeight: 800, color: isPendingGrading ? 'var(--warning)' : 'var(--text-title)' }}>
-            {isPendingGrading ? '--' : (attempt.score ?? 0).toFixed(1)}
+            {isPendingGrading ? '--' : ((attempt?.score ?? 0)?.toFixed?.(1) ?? '0.0')}
           </span>
           <span style={{ fontSize: '24px', color: 'var(--text-muted)' }}>/ {totalPoints} points</span>
         </div>
@@ -148,7 +148,7 @@ const QuizResult = () => {
                   Question {idx + 1}: {q.text}
                 </h4>
                 <span className="badge badge-student" style={{ flexShrink: 0 }}>
-                  {sub.score !== null && sub.score !== undefined ? `${sub.score.toFixed(1)} / ${q.points}` : `? / ${q.points}`} pts
+                  {sub?.score != null ? `${sub.score?.toFixed?.(1) ?? sub.score} / ${q.points}` : `? / ${q.points}`} pts
                 </span>
               </div>
 

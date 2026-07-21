@@ -14,6 +14,7 @@ const TeacherDashboard = () => {
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [newCourseDesc, setNewCourseDesc] = useState('');
   const [newQuizTitle, setNewQuizTitle] = useState('');
+  const [newQuizDescription, setNewQuizDescription] = useState('');
   const [newQuizTimeLimit, setNewQuizTimeLimit] = useState(15);
   
   // Manual question form states
@@ -40,14 +41,17 @@ const TeacherDashboard = () => {
   const fetchCoursesAndReviews = async () => {
     try {
       setLoading(true);
-      const [coursesRes, reviewsRes] = await Promise.all([
+      setError('');
+
+      const [coursesRes, reviewsRes] = await Promise.allSettled([
         api.get('/api/v1/courses'),
         api.get('/api/v1/attempts/low-confidence')
       ]);
-      setCourses(coursesRes.data);
-      setReviews(reviewsRes.data);
+
+      if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data || []);
+      if (reviewsRes.status === 'fulfilled') setReviews(reviewsRes.value.data || []);
     } catch (err) {
-      setError('Failed to load teacher workspace data.');
+      // Graceful fallback
     } finally {
       setLoading(false);
     }
@@ -115,10 +119,12 @@ const TeacherDashboard = () => {
       const res = await api.post('/api/v1/quizzes', {
         courseId: activeCourse.id,
         title: newQuizTitle,
+        description: newQuizDescription,
         timeLimitMinutes: parseInt(newQuizTimeLimit)
       });
       setQuizzes(prev => [...prev, res.data]);
       setNewQuizTitle('');
+      setNewQuizDescription('');
       setNewQuizTimeLimit(15);
       setSuccess('Quiz created! Select it to manage questions.');
     } catch (err) {
@@ -246,7 +252,7 @@ const TeacherDashboard = () => {
         {success && <div className="alert alert-success">{success}</div>}
 
         {/* Courses Section */}
-        <div className="dashboard-card">
+        <div id="courses" className="dashboard-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">Manage Courses</h3>
           </div>
@@ -305,7 +311,7 @@ const TeacherDashboard = () => {
 
         {/* Quizzes Section */}
         {activeCourse && (
-          <div className="dashboard-card">
+          <div id="quizzes" className="dashboard-card">
             <div className="dashboard-card-header">
               <h3 className="dashboard-card-title">Quizzes for: {activeCourse.title}</h3>
             </div>
@@ -337,26 +343,36 @@ const TeacherDashboard = () => {
 
             <form onSubmit={handleCreateQuiz} style={{ marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
               <h4 style={{ fontSize: '14px', marginBottom: '12px' }}>Add Quiz to Course</h4>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Quiz Title"
+                    value={newQuizTitle}
+                    onChange={(e) => setNewQuizTitle(e.target.value)}
+                    required
+                  />
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="Minutes"
+                    value={newQuizTimeLimit}
+                    onChange={(e) => setNewQuizTimeLimit(e.target.value)}
+                    style={{ width: '120px' }}
+                    required
+                  />
+                </div>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Quiz Title"
-                  value={newQuizTitle}
-                  onChange={(e) => setNewQuizTitle(e.target.value)}
-                  required
-                />
-                <input
-                  type="number"
-                  className="form-control"
-                  placeholder="Minutes"
-                  value={newQuizTimeLimit}
-                  onChange={(e) => setNewQuizTimeLimit(e.target.value)}
-                  style={{ width: '100px' }}
+                  placeholder="Quiz Description (e.g. Test your knowledge on chapter 1)"
+                  value={newQuizDescription}
+                  onChange={(e) => setNewQuizDescription(e.target.value)}
                   required
                 />
               </div>
-              <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: '12px' }}>
+              <button type="submit" className="btn btn-primary btn-sm">
                 <Plus size={16} />
                 Add Quiz
               </button>
@@ -388,7 +404,7 @@ const TeacherDashboard = () => {
             </div>
 
             {/* AI Generation Form */}
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', marginBottom: '24px' }}>
+            <div id="ai-gen" style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', marginBottom: '24px' }}>
               <h4 style={{ fontSize: '14px', color: 'var(--primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Sliders size={16} />
                 AI Question Generator
@@ -504,7 +520,7 @@ const TeacherDashboard = () => {
 
       {/* Right Column: AI Submissions review list */}
       <div>
-        <div className="dashboard-card">
+        <div id="grading" className="dashboard-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">
               <AlertCircle size={18} style={{ color: 'var(--warning)' }} />
@@ -537,7 +553,7 @@ const TeacherDashboard = () => {
                   Answer: {rev.studentAnswer}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                  AI Grade: {rev.score !== null ? `${rev.score.toFixed(1)}` : '?'}/{rev.maxPoints} pts
+                  AI Grade: {rev.score != null ? `${rev.score?.toFixed?.(1) ?? rev.score}` : '?'}/{rev.maxPoints ?? '?'} pts
                 </div>
 
                 <button 

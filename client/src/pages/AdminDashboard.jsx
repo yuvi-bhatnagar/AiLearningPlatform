@@ -13,17 +13,16 @@ const AdminDashboard = () => {
   const fetchAdminData = async () => {
     try {
       setError('');
-      // Fetch health checks directly using backend url to prevent proxy mismatch
-      // and fetch audit logs via api service
-      const [healthRes, logsRes] = await Promise.all([
-        fetch('http://localhost:5209/health').then(r => r.json()),
+
+      const [healthRes, logsRes] = await Promise.allSettled([
+        api.get('/health'),
         api.get('/api/v1/auditlogs')
       ]);
 
-      setHealth(healthRes);
-      setAuditLogs(logsRes.data);
+      if (healthRes.status === 'fulfilled') setHealth(healthRes.value.data);
+      if (logsRes.status === 'fulfilled') setAuditLogs(logsRes.value.data || []);
     } catch (err) {
-      setError('Failed to retrieve administrative diagnostics or audit logs.');
+      // Graceful fallback
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -65,7 +64,7 @@ const AdminDashboard = () => {
       {error && <div className="alert alert-danger">{error}</div>}
 
       {/* Top Section: Health Check and Usage Stats */}
-      <div className="dashboard-grid">
+      <div id="health" className="dashboard-grid">
         {/* Component Health Check Status */}
         <div className="dashboard-card">
           <div className="dashboard-card-header">
@@ -156,7 +155,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Bottom Section: Audit Log Table */}
-      <div className="dashboard-card">
+      <div id="audit" className="dashboard-card">
         <div className="dashboard-card-header">
           <h3 className="dashboard-card-title">
             <FileText size={18} />

@@ -72,6 +72,23 @@
   padding: 0;
 }
 
+body,
+p,
+span,
+h1, h2, h3, h4, h5, h6,
+div,
+td, th,
+li,
+label {
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-main);
@@ -160,6 +177,22 @@ header {
 }
 
 /* Buttons */
+button,
+.btn,
+.option-btn,
+[role="button"] {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button *,
+.btn *,
+.option-btn *,
+[role="button"] * {
+  cursor: pointer;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

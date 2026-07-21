@@ -1,6 +1,3 @@
-using System; // Javascript file, wait! CodeContent must be Javascript! No C# syntax!
-
-// JS content:
 import axios from 'axios';
 
 const api = axios.create({
@@ -12,7 +9,11 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (typeof config.headers.set === 'function') {
+        config.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -25,6 +26,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
+    // Do not attempt token refresh for authentication endpoints
+    if (originalRequest?.url?.includes('/api/v1/auth/')) {
+      return Promise.reject(error);
+    }
+
     // Check if response is 401 and we haven't already retried
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -50,10 +56,7 @@ api.interceptors.response.use(
           return api(originalRequest);
         } catch (refreshError) {
           // If refresh fails, clear token storage and redirect to login
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('username');
+          localStorage.clear();
           window.location.href = '/login';
           return Promise.reject(refreshError);
         }

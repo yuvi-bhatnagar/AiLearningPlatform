@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, UserPlus, AlertCircle, Sparkles } from 'lucide-react';
 import api from '../services/api';
+import { UserRole, normalizeRole, getDashboardForRole } from '../utils/roles';
 
-const Register = () => {
+const Register = ({ onAuthSuccess }) => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('Student'); // Default role
+  const [role, setRole] = useState(UserRole.STUDENT); // Default role
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -18,28 +18,36 @@ const Register = () => {
     setError('');
     setLoading(true);
 
-    // Map role string to enum integer if backend expects integer,
-    // Wait! Let's check what backend AuthController Register expects for role:
-    // In our backend models, UserRole enum: Student = 0, Teacher = 1, Admin = 2 (or student=0, teacher=1).
-    // Let's verify what values RegisterRequest uses for role:
-    // Let's see: in RegisterRequest, the type is UserRole role.
-    // In .NET 8/9/10, standard system text json serializes/deserializes enum by name OR value. Since it's case-insensitive name deserialization by default in ASP.NET Core, sending string "Student" or "Teacher" works perfectly, but we can also map them to integers just to be safe.
-    // Wait, let's map it: Student -> 0, Teacher -> 1.
-    const mappedRole = role === 'Student' ? 0 : 1;
+    const mappedRole = role === UserRole.STUDENT ? 0 : 1;
 
     try {
-      await api.post('/api/v1/auth/register', {
+      const response = await api.post('/api/v1/auth/register', {
         username,
         email,
         password,
         role: mappedRole,
       });
-      setSuccess(true);
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+
+      const accessToken = response.data.accessToken || response.data.AccessToken;
+      const refreshToken = response.data.refreshToken || response.data.RefreshToken;
+      const rawRole = response.data.role !== undefined ? response.data.role : response.data.Role;
+      const returnedUsername = response.data.username || response.data.Username || username;
+
+      const normalizedRole = normalizeRole(rawRole);
+
+      if (!accessToken || !normalizedRole) {
+        throw new Error('Failed to parse authentication response from server.');
+      }
+
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken || '');
+      localStorage.setItem('userRole', normalizedRole);
+      localStorage.setItem('username', returnedUsername);
+
+      if (onAuthSuccess) onAuthSuccess();
+      navigate(getDashboardForRole(normalizedRole));
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please check inputs.');
+      setError(err.response?.data?.message || err.message || 'Registration failed. Please check inputs.');
     } finally {
       setLoading(false);
     }

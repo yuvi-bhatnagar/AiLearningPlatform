@@ -7,7 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5209',
+        target: 'https://localhost:7142',
+        changeOrigin: true,
+        secure: false
+      },
+      '/health': {
+        target: 'https://localhost:7142',
         changeOrigin: true,
         secure: false
       }

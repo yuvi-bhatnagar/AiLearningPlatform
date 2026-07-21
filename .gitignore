@@ -44,3 +44,6 @@ appsettings.*.json
 # Allow the example templates to be committed
 !appsettings.example.json
 !appsettings.*.example.json
+
+# logs
+log*.txt

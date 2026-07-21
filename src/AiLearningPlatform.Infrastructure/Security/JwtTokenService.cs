@@ -50,13 +50,11 @@ public class JwtTokenService : ITokenService
         // These are automatically read by ASP.NET Core's authorization middleware
         var claims = new[]
         {
-            // Sub (Subject) = who the token represents — standard JWT claim
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            // Jti (JWT ID) = unique token identifier — helps with token revocation if needed
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Email, user.Email),
-            // ClaimTypes.Role is what [Authorize(Roles = "Teacher")] checks against
             new Claim(ClaimTypes.Role, user.Role.ToString())
         };
 

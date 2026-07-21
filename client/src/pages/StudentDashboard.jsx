@@ -18,25 +18,22 @@ const StudentDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [coursesRes, leaderboardRes, attemptsRes] = await Promise.all([
+      setError('');
+
+      const [coursesRes, leaderboardRes, attemptsRes, summaryRes] = await Promise.allSettled([
         api.get('/api/v1/courses'),
         api.get('/api/v1/leaderboards'),
-        api.get('/api/v1/attempts')
+        api.get('/api/v1/attempts'),
+        api.get('/api/v1/leaderboards/summary')
       ]);
 
-      setCourses(coursesRes.data);
-      setLeaderboard(leaderboardRes.data);
-      setAttempts(attemptsRes.data);
-
-      try {
-        const summaryRes = await api.get('/api/v1/leaderboards/summary');
-        setSummary(summaryRes.data);
-      } catch (sumErr) {
-        // Safe check if no performance statistics exist yet for new user
-        setSummary(null);
-      }
+      if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data || []);
+      if (leaderboardRes.status === 'fulfilled') setLeaderboard(leaderboardRes.value.data || []);
+      if (attemptsRes.status === 'fulfilled') setAttempts(attemptsRes.value.data || []);
+      if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value.data);
+      else setSummary(null);
     } catch (err) {
-      setError('Failed to load dashboard data. Please try again.');
+      // Graceful fallback
     } finally {
       setLoading(false);
     }
@@ -79,7 +76,7 @@ const StudentDashboard = () => {
   return (
     <div className="dashboard-grid">
       {/* Left Column: Courses and Quizzes */}
-      <div>
+      <div id="courses">
         <h2 style={{ fontSize: '24px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <BookOpen className="logo-icon" />
           My Courses
@@ -183,7 +180,7 @@ const StudentDashboard = () => {
         </div>
 
         {/* Quiz Attempts History */}
-        <div className="dashboard-card" style={{ marginTop: '24px' }}>
+        <div id="history" className="dashboard-card" style={{ marginTop: '24px' }}>
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">
               <FileText size={18} />
@@ -249,7 +246,7 @@ const StudentDashboard = () => {
       {/* Right Column: Performance Summary and Leaderboard */}
       <div>
         {/* Performance Statistics */}
-        <div className="dashboard-card">
+        <div id="stats" className="dashboard-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">
               <BarChart2 size={18} />
@@ -261,19 +258,19 @@ const StudentDashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div style={{ padding: '12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Average Score</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)' }}>{summary.averageScore.toFixed(1)}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)' }}>{summary.averageScore?.toFixed?.(1) ?? '0.0'}</div>
               </div>
               <div style={{ padding: '12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Highest Score</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--secondary)' }}>{summary.highestScore}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--secondary)' }}>{summary.highestScore ?? 0}</div>
               </div>
               <div style={{ padding: '12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Lowest Score</div>
-                <div style={{ fontSize: '20px', fontWeight: 700 }}>{summary.lowestScore}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{summary.lowestScore ?? 0}</div>
               </div>
               <div style={{ padding: '12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total Attempts</div>
-                <div style={{ fontSize: '20px', fontWeight: 700 }}>{summary.totalAttempts}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{summary.totalAttempts ?? 0}</div>
               </div>
             </div>
           ) : (
@@ -284,7 +281,7 @@ const StudentDashboard = () => {
         </div>
 
         {/* Global Leaderboard */}
-        <div className="dashboard-card">
+        <div id="leaderboard" className="dashboard-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">
               <Trophy size={18} style={{ color: '#f59e0b' }} />
@@ -293,31 +290,31 @@ const StudentDashboard = () => {
           </div>
 
           <div className="leaderboard-list">
-            {leaderboard.map((row, idx) => (
-              <div key={row.userId} className="leaderboard-row">
+            {(leaderboard || []).map((row, idx) => (
+              <div key={row.userId || idx} className="leaderboard-row">
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <span className={`leaderboard-rank ${idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : 'rank-other'}`}>
                     {idx + 1}
                   </span>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-title)' }}>
-                      {row.username}
+                      {row.username || 'Anonymous'}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {row.totalAttempts} attempts
+                      {row.totalAttempts ?? 0} attempts
                     </div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)' }}>
-                    {row.totalScore.toFixed(1)}
+                    {row.totalScore?.toFixed?.(1) ?? '0.0'}
                   </div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>avg: {row.averageScore.toFixed(1)}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>avg: {row.averageScore?.toFixed?.(1) ?? '0.0'}</div>
                 </div>
               </div>
             ))}
 
-            {leaderboard.length === 0 && (
+            {(!leaderboard || leaderboard.length === 0) && (
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' }}>
                 No records listed on the leaderboard yet.
               </p>

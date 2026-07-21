@@ -210,7 +210,8 @@ public class AuthController : ControllerBase
 
             // Extra check: ensure the algorithm is HMAC-SHA256 (prevents algorithm substitution attacks)
             if (validatedToken is not JwtSecurityToken jwtToken ||
-                !jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.OrdinalIgnoreCase))
+                (!jwtToken.Header.Alg.Equals("HS256", StringComparison.OrdinalIgnoreCase) &&
+                 !jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.OrdinalIgnoreCase)))
                 return null;
 
             return principal;

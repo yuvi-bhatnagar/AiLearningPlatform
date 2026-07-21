@@ -83,8 +83,14 @@ builder.Services.AddAuthentication(options =>
     // writes a consistent, friendly JSON error payload back to the client.
     options.Events = new JwtBearerEvents
     {
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine($"[JWT Auth Failure] Exception: {context.Exception.Message}");
+            return Task.CompletedTask;
+        },
         OnChallenge = context =>
         {
+            Console.WriteLine($"[JWT Challenge] Error: {context.Error}, Description: {context.ErrorDescription}, Exception: {context.AuthenticateFailure?.Message}");
             // Skip the default framework logic to prevent writing the default header challenge format
             context.HandleResponse();
 
@@ -197,7 +203,11 @@ builder.Services.AddRateLimiter(options =>
 // ============================================================
 // 5. CONTROLLERS & SWAGGER (Swashbuckle with JWT Bearer)
 // ============================================================
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Why Swashbuckle instead of AddOpenApi()?
 // We use Swashbuckle.AspNetCore (already installed) because it has stable, built-in
@@ -319,6 +329,8 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
     var adminConfig = app.Configuration.GetSection("AdminSeed");
 

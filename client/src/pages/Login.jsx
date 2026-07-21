@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import api from '../services/api';
+import { normalizeRole, getDashboardForRole } from '../utils/roles';
 
 const Login = ({ onAuthSuccess }) => {
   const [email, setEmail] = useState('');
@@ -18,21 +19,26 @@ const Login = ({ onAuthSuccess }) => {
     try {
       const response = await api.post('/api/v1/auth/login', { email, password });
       
-      const { accessToken, refreshToken, role, username } = response.data;
+      const accessToken = response.data.accessToken || response.data.AccessToken;
+      const refreshToken = response.data.refreshToken || response.data.RefreshToken;
+      const rawRole = response.data.role !== undefined ? response.data.role : response.data.Role;
+      const username = response.data.username || response.data.Username || '';
+
+      const normalizedRole = normalizeRole(rawRole);
+
+      if (!accessToken || !normalizedRole) {
+        throw new Error('Failed to parse authentication response from server.');
+      }
       
       localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('userRole', role);
+      localStorage.setItem('refreshToken', refreshToken || '');
+      localStorage.setItem('userRole', normalizedRole);
       localStorage.setItem('username', username);
       
       onAuthSuccess();
-      
-      // Redirect based on role
-      if (role === 'Student') navigate('/student');
-      else if (role === 'Teacher') navigate('/teacher');
-      else if (role === 'Admin') navigate('/admin');
+      navigate(getDashboardForRole(normalizedRole));
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password.');
+      setError(err.response?.data?.message || err.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }

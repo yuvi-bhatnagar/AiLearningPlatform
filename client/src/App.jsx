@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { BookOpen, LogOut, Shield, GraduationCap, LayoutDashboard } from 'lucide-react';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
+import DashboardLayout from './components/DashboardLayout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import StudentDashboard from './pages/StudentDashboard';
@@ -9,6 +10,7 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import QuizAttempt from './pages/QuizAttempt';
 import QuizResult from './pages/QuizResult';
+import { UserRole, normalizeRole, getDashboardForRole } from './utils/roles';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -16,7 +18,7 @@ function App() {
   // Sync user state with local storage
   const syncUser = () => {
     const token = localStorage.getItem('accessToken');
-    const role = localStorage.getItem('userRole');
+    const role = normalizeRole(localStorage.getItem('userRole'));
     const username = localStorage.getItem('username');
     if (token && role) {
       setUser({ token, role, username });
@@ -33,10 +35,7 @@ function App() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('username');
+    localStorage.clear();
     setUser(null);
     window.location.href = '/login';
   };
@@ -96,25 +95,37 @@ function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="container" style={{ flexGrow: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
+      <main className={user ? "" : "container"} style={{ flexGrow: 1, padding: user ? '0' : '32px 24px', display: 'flex', flexDirection: 'column' }}>
         <Routes>
           {/* Guest routes */}
-          <Route path="/login" element={<Login onAuthSuccess={syncUser} />} />
-          <Route path="/register" element={<Register />} />
+          <Route 
+            path="/login" 
+            element={
+              user ? <Navigate to={getDashboardForRole(user.role)} replace /> : <Login onAuthSuccess={syncUser} />
+            } 
+          />
+          <Route 
+            path="/register" 
+            element={
+              user ? <Navigate to={getDashboardForRole(user.role)} replace /> : <Register onAuthSuccess={syncUser} />
+            } 
+          />
 
           {/* Student Protected routes */}
           <Route 
             path="/student" 
             element={
-              <RoleProtectedRoute allowedRoles={['Student']}>
-                <StudentDashboard />
+              <RoleProtectedRoute allowedRoles={[UserRole.STUDENT]}>
+                <DashboardLayout user={user}>
+                  <StudentDashboard />
+                </DashboardLayout>
               </RoleProtectedRoute>
             } 
           />
           <Route 
             path="/quiz/:quizId/attempt" 
             element={
-              <RoleProtectedRoute allowedRoles={['Student']}>
+              <RoleProtectedRoute allowedRoles={[UserRole.STUDENT]}>
                 <QuizAttempt />
               </RoleProtectedRoute>
             } 
@@ -122,7 +133,7 @@ function App() {
           <Route 
             path="/attempt/:attemptId/result" 
             element={
-              <RoleProtectedRoute allowedRoles={['Student']}>
+              <RoleProtectedRoute allowedRoles={[UserRole.STUDENT]}>
                 <QuizResult />
               </RoleProtectedRoute>
             } 
@@ -132,8 +143,10 @@ function App() {
           <Route 
             path="/teacher" 
             element={
-              <RoleProtectedRoute allowedRoles={['Teacher']}>
-                <TeacherDashboard />
+              <RoleProtectedRoute allowedRoles={[UserRole.TEACHER]}>
+                <DashboardLayout user={user}>
+                  <TeacherDashboard />
+                </DashboardLayout>
               </RoleProtectedRoute>
             } 
           />
@@ -142,8 +155,10 @@ function App() {
           <Route 
             path="/admin" 
             element={
-              <RoleProtectedRoute allowedRoles={['Admin']}>
-                <AdminDashboard />
+              <RoleProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+                <DashboardLayout user={user}>
+                  <AdminDashboard />
+                </DashboardLayout>
               </RoleProtectedRoute>
             } 
           />
@@ -152,13 +167,7 @@ function App() {
           <Route 
             path="/" 
             element={
-              user ? (
-                user.role === 'Student' ? <Navigate to="/student" replace /> :
-                user.role === 'Teacher' ? <Navigate to="/teacher" replace /> :
-                <Navigate to="/admin" replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              user ? <Navigate to={getDashboardForRole(user.role)} replace /> : <Navigate to="/login" replace />
             } 
           />
           <Route path="*" element={<Navigate to="/" replace />} />
